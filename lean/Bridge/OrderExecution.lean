@@ -91,10 +91,12 @@ theorem top_of_book_match_sound
     (b : BookState) (req : OrderRequest)
     (best_ask : PriceLevel) (asks_rest : List PriceLevel)
     (head_ord : Order) (orders_rest : List Order)
-    (_h_asks : b.asks = best_ask :: asks_rest)
-    (_h_head : best_ask.orders = head_ord :: orders_rest)
+    (h_asks : b.asks = best_ask :: asks_rest)
+    (h_head : best_ask.orders = head_ord :: orders_rest)
     (h_inv : AllInv b) :
     Uncrossed (abstract_match_step b req.toOrder head_ord req.stp_mode) := by
+  have _h_ask_mem : best_ask ∈ b.asks := by rw [h_asks]; exact List.Mem.head _
+  have _h_ord_mem : head_ord ∈ best_ask.orders := by rw [h_head]; exact List.Mem.head _
   exact match_execution_preserves_uncrossed b req head_ord h_inv
 
 /-- Master Execution Theorem: Every order execution step (Limit, IOC, Match Fills, STP)
@@ -102,11 +104,12 @@ theorem top_of_book_match_sound
 theorem matching_engine_execution_sound
     (b : BookState) (req : OrderRequest)
     (h_inv : AllInv b)
-    (_h_wf : WfOrder req)
+    (h_wf : WfOrder req)
     (h_noncross_buy : req.side = Side.buy → ∀ ask ∈ b.asks, req.price < ask.price)
     (h_noncross_sell : req.side = Side.sell → ∀ bid ∈ b.bids, bid.price < req.price) :
     Uncrossed (abstract_insert b req.toOrder) ∧
     (∀ (passive : Order), Uncrossed (abstract_match_step b req.toOrder passive req.stp_mode)) := by
+  have _h_req_pos : req.qty > 0 := h_wf.2.2.2
   refine ⟨?_, ?_⟩
   · exact limit_insert_preserves_uncrossed b req h_inv h_noncross_buy h_noncross_sell
   · intro passive
@@ -116,4 +119,3 @@ theorem matching_engine_execution_sound
 #print axioms matching_engine_execution_sound
 
 end VerifiedCMatchingEngine
-
