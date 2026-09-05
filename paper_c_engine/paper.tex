@@ -388,7 +388,6 @@ theorem c_matching_engine_end_to_end_sound
     (bids_root asks_root : Option Path)
     (book : BookState)
     (req : OrderRequest)
-    (h_wf_req : WfOrder req)
     (h_contract : AmccMemoryContract m bids_root asks_root book)
     (h_noncross_buy : req.side = Side.buy → ∀ ask ∈ book.asks, req.price < ask.price)
     (h_noncross_sell : req.side = Side.sell → ∀ bid ∈ book.bids, bid.price < req.price) :
@@ -401,17 +400,17 @@ theorem c_matching_engine_end_to_end_sound
 Furthermore, we formalize the operational forward simulation connecting C big-step execution to abstract order book state transitions:
 \begin{lstlisting}[language=lean4]
 theorem insert_forward_sim
-    (S : Interface.Schema) (m : Mem) (req : OrderRequest) (fuel : Nat)
+    (S : Schema) (m : Mem) (req : OrderRequest) (fuel : Nat)
     (bids_root asks_root : Option Path)
-    (h_schema : SchemaAccepts S)
+    (h_S : Schema.wf S = true)
     (h_empty : alpha_concrete m bids_root asks_root = some emptyBook)
     (h_wf : WfMem m bids_root asks_root)
     (h_wf_req : WfOrder req)
     (h_fuel : fuel ≥ execFuelBound emptyBook req.side) :
-    ∃ m',
-      execStmt (genC S) fuel (insertStmt req) m = .ok (m', Outcome.normal) ∧
-      WfMem m' bids_root asks_root ∧
-      alpha_concrete m' bids_root asks_root = some (abstract_insert emptyBook req.toOrder)
+    ∃ (st' : Store),
+      execStmt (Templates.ArrayTable.genC S) fuel (insertStmt req) (m.toStore ∅) = .ok (st', Outcome.normal) ∧
+      WfMem st'.toMem bids_root asks_root ∧
+      alpha_concrete st'.toMem bids_root asks_root = some (abstract_insert emptyBook req.toOrder)
 \end{lstlisting}
 
 \noindent Checking dependencies via \texttt{\#print axioms c\_matching\_engine\_end\_to\_end\_sound} yields exclusively:

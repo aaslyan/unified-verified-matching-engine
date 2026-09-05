@@ -169,17 +169,15 @@ def decrementInLevels (levels : List PriceLevel) (id : OrderId) (decr : Quantity
 /-- Abstract Self-Trade Prevention: Updates resting book state according to STP policy:
     - `cancel_new`: leaves resting book state untouched (incoming aggressor order is rejected)
     - `cancel_old`: cancels the resting order from the book
-    - `cancel_both`: cancels the resting order from the book (incoming aggressor cancellation is handled by dispatcher)
+    - `cancel_both`: cancels the resting order from the book (incoming aggressor cancellation cannot be reflected in resting BookState)
     - `decrement_and_continue`: decrements the resting order volume by `decr_qty` -/
-def abstract_stp_step (b : BookState) (aggressor : Order) (mode : STPMode) (resting_id : OrderId) (decr_qty : Quantity) : BookState :=
+def abstract_stp_step (b : BookState) (_aggressor : Order) (mode : STPMode) (resting_id : OrderId) (decr_qty : Quantity) : BookState :=
   match mode with
   | STPMode.cancel_new => b
   | STPMode.cancel_old => abstract_cancel b resting_id
   | STPMode.cancel_both => abstract_cancel b resting_id
   | STPMode.decrement_and_continue =>
-    if aggressor.qty > 0 then
-      { bids := decrementInLevels b.bids resting_id decr_qty, asks := decrementInLevels b.asks resting_id decr_qty }
-    else b
+    { bids := decrementInLevels b.bids resting_id decr_qty, asks := decrementInLevels b.asks resting_id decr_qty }
 
 /-- Abstract Matching Execution against top-of-book:
     Evaluates self-trade prevention when accounts match, or decrements resting order quantity by filled volume. -/
@@ -243,9 +241,7 @@ theorem stp_preserves_uncrossed (b : BookState) (aggressor : Order) (mode : STPM
   | cancel_both => exact cancel_preserves_uncrossed b resting_id h_uncrossed
   | decrement_and_continue =>
     dsimp [abstract_stp_step]
-    split
-    · exact decrement_preserves_uncrossed b resting_id decr h_uncrossed
-    · exact h_uncrossed
+    exact decrement_preserves_uncrossed b resting_id decr h_uncrossed
 
 /-- Theorem: Matching executions preserve the uncrossed book invariant -/
 theorem match_step_preserves_uncrossed (b : BookState) (aggressor : Order) (passive : Order) (mode : STPMode)

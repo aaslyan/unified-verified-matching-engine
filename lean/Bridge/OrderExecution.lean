@@ -78,43 +78,36 @@ theorem ioc_cancel_preserves_uncrossed
     Uncrossed (abstract_cancel b id) := by
   exact cancel_preserves_uncrossed b id h_inv.uncrossed
 
-/-- Theorem: Match step execution against top-of-book preserves uncrossed invariant -/
-theorem match_execution_preserves_uncrossed
+/-- Theorem: Match step execution against any passive order preserves the uncrossed invariant.
+    (Uncrossed preservation holds for any passive order; no top-of-book hypothesis required.) -/
+theorem match_any_passive_preserves_uncrossed
     (b : BookState) (req : OrderRequest) (passive : Order)
     (h_inv : AllInv b) :
     Uncrossed (abstract_match_step b req.toOrder passive req.stp_mode) := by
   exact match_step_preserves_uncrossed b req.toOrder passive req.stp_mode h_inv.uncrossed
 
-/-- Theorem: Matching against Top-of-Book (derived from EngineDb_asks_First and PriceLevel_orders_First)
-    Proves that executing against the first passive order on the best price level preserves Uncrossed. -/
+/-- Backward-compatible name for top_of_book matching soundness -/
 theorem top_of_book_match_sound
-    (b : BookState) (req : OrderRequest)
-    (best_ask : PriceLevel) (asks_rest : List PriceLevel)
-    (head_ord : Order) (orders_rest : List Order)
-    (h_asks : b.asks = best_ask :: asks_rest)
-    (h_head : best_ask.orders = head_ord :: orders_rest)
+    (b : BookState) (req : OrderRequest) (passive : Order)
     (h_inv : AllInv b) :
-    Uncrossed (abstract_match_step b req.toOrder head_ord req.stp_mode) := by
-  have _h_ask_mem : best_ask ∈ b.asks := by rw [h_asks]; exact List.Mem.head _
-  have _h_ord_mem : head_ord ∈ best_ask.orders := by rw [h_head]; exact List.Mem.head _
-  exact match_execution_preserves_uncrossed b req head_ord h_inv
+    Uncrossed (abstract_match_step b req.toOrder passive req.stp_mode) :=
+  match_any_passive_preserves_uncrossed b req passive h_inv
 
 /-- Master Execution Theorem: Every order execution step (Limit, IOC, Match Fills, STP)
     preserves the mathematical invariants of the limit order book. -/
 theorem matching_engine_execution_sound
     (b : BookState) (req : OrderRequest)
     (h_inv : AllInv b)
-    (h_wf : WfOrder req)
     (h_noncross_buy : req.side = Side.buy → ∀ ask ∈ b.asks, req.price < ask.price)
     (h_noncross_sell : req.side = Side.sell → ∀ bid ∈ b.bids, bid.price < req.price) :
     Uncrossed (abstract_insert b req.toOrder) ∧
     (∀ (passive : Order), Uncrossed (abstract_match_step b req.toOrder passive req.stp_mode)) := by
-  have _h_req_pos : req.qty > 0 := h_wf.2.2.2
   refine ⟨?_, ?_⟩
   · exact limit_insert_preserves_uncrossed b req h_inv h_noncross_buy h_noncross_sell
   · intro passive
-    exact match_execution_preserves_uncrossed b req passive h_inv
+    exact match_any_passive_preserves_uncrossed b req passive h_inv
 
+#print axioms match_any_passive_preserves_uncrossed
 #print axioms top_of_book_match_sound
 #print axioms matching_engine_execution_sound
 

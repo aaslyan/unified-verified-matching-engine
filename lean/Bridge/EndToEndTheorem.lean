@@ -37,7 +37,6 @@ theorem c_matching_engine_end_to_end_sound
     (bids_root asks_root : Option Path)
     (book : BookState)
     (req : OrderRequest)
-    (h_wf_req : WfOrder req)
     (h_contract : AmccMemoryContract m bids_root asks_root book)
     (h_noncross_buy : req.side = Side.buy → ∀ ask ∈ book.asks, req.price < ask.price)
     (h_noncross_sell : req.side = Side.sell → ∀ bid ∈ book.bids, bid.price < req.price) :
@@ -50,7 +49,7 @@ theorem c_matching_engine_end_to_end_sound
     -- 3. Immediate-or-Cancel cancellation preserves uncrossed invariant
     Uncrossed (abstract_cancel book req.id) := by
   have h_inv : AllInv book := wf_mem_implies_AllInv m bids_root asks_root book h_contract
-  have h_exec := matching_engine_execution_sound book req h_inv h_wf_req h_noncross_buy h_noncross_sell
+  have h_exec := matching_engine_execution_sound book req h_inv h_noncross_buy h_noncross_sell
   have h_ioc := ioc_cancel_preserves_uncrossed book req.id h_inv
   exact ⟨h_inv, h_exec.1, h_exec.2, h_ioc⟩
 
