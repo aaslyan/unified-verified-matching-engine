@@ -48,14 +48,39 @@ def matchStmt (req : OrderRequest) (passive : Order) : Stmt :=
     Expr.lit (Lit.u64 passive.id)
   ]
 
+/-!
+### Architectural Gap & Forward Simulation Status
+
+`insert_forward_sim` and `match_step_forward_sim` formalize the target forward simulation
+theorems linking C big-step operational evaluation (`execStmt`) to abstract limit order book transitions.
+
+**Why this theorem is blocked (and provably unprovable against current AMCC `genC`):**
+1. **Generator Mismatch**: `Templates.ArrayTable.genC` is currently the only end-to-end code generator in AMCC.
+   It synthesizes flat arrays (`_Find`, `_InsertMaybe`, `_Remove`).
+2. **Schema & Multi-Template Gap**: The matching engine schema (`matching_engine.ssim`) utilizes
+   composite intrusive structures: `Atree` (price levels), `Llist` (order queues), `Thash` (order index),
+   and `Tpool`/`Inlary` (order pool).
+3. **Execution & Decoding Mismatch**: Calling `insertStmt` (`"EngineDb_insert"`) against `Templates.ArrayTable.genC S`
+   will not find the function in the AST, and even if executed, `alpha_concrete` expects `tree_left`, `tree_right`,
+   `orders_head`, and `orders_next` which `ArrayTable` never emits.
+
+**Prerequisites to close the forward simulation bridge:**
+1. **`Llist` Refinement**: Implement `Llist.elems` decoder, `Llist.RepInv`, and `InsertTail`/`Remove` simulation laws
+   (building on the existing 32 reader theorems in `Amcc.Templates.LlistWf`).
+2. **`Atree` Refinement**: Implement `Atree.RepInv` + `Atree.elems` + `InsertRefines` (generalizing the `TreeBoundedBST`
+   formalism proved in Step 3).
+3. **Composite Multi-Template `genC`**: Extend AMCC's code generator beyond single `ArrayTable` schemas to synthesize
+   composed programs with mutual intrusive references.
+4. **SSIM Schema Elaborator**: Parse `matching_engine.ssim` into a verified Lean `Schema` (`meSchema`).
+-/
+
 /-- Master Forward Simulation Theorem for Order Insertion:
-    Executing the generated C matching engine insertion pipeline (`genC S`) on a well-formed memory state `m`
+    Executing the generated C matching engine insertion pipeline on a well-formed memory state `m`
     under call/loop budget `fuel` produces a deterministic post-state `st'` whose persisted memory `st'.toMem`
     satisfies `WfMem` and decodes via `alpha_concrete` to `abstract_insert emptyBook req.toOrder`.
 
-    NOTE: Formulated as the explicit, machine-checked forward simulation contract connecting
-    `execStmt (genC S)` to `abstract_insert`. Marked with an honest `sorry` documenting the
-    remaining multi-table compiler bridge obligations. -/
+    NOTE: Blocked on multi-template `genC` compiler synthesis (see module header).
+    Marked with an honest `sorry` documenting the compiler simulation obligations. -/
 theorem insert_forward_sim
     (S : Schema) (m : Mem) (req : OrderRequest) (fuel : Nat)
     (bids_root asks_root : Option Path)
@@ -68,6 +93,8 @@ theorem insert_forward_sim
       execStmt (Templates.ArrayTable.genC S) fuel (insertStmt req) (m.toStore ∅) = .ok (st', Outcome.normal) ∧
       WfMem st'.toMem bids_root asks_root ∧
       alpha_concrete st'.toMem bids_root asks_root = some (abstract_insert emptyBook req.toOrder) := by
+  -- BLOCKED: Templates.ArrayTable.genC synthesizes flat array tables, not the composite
+  -- Atree/Llist/Thash matching engine structures required by alpha_concrete and insertStmt.
   sorry
 
 /-- Forward Simulation for Match Step Execution:
