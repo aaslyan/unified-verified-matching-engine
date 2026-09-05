@@ -97,46 +97,51 @@ def tmpNext : Ident := "_next"
 
 structure Names where
   /-- The single global holding the parent ctype. -/
-  dbGlobal : Ident
+  dbGlobal   : Ident
   /-- Head of the list, on the parent. -/
-  head     : Ident
+  head       : Ident
+  /-- Tail of the list, on the parent. -/
+  tail       : Ident
   /-- Element count, on the parent. -/
-  count    : Ident
+  count      : Ident
   /-- Forward link, on the element. -/
-  next     : Ident
+  next       : Ident
   /-- Back link, on the element. -/
-  prev     : Ident
+  prev       : Ident
   /-- Membership flag, on the element. -/
-  inlist   : Ident
-  init     : Ident
-  insert   : Ident
-  remove   : Ident
-  first    : Ident
-  nextFn   : Ident
-  prevFn   : Ident
-  inQ      : Ident
-  emptyQ   : Ident
-  size     : Ident
+  inlist     : Ident
+  init       : Ident
+  insert     : Ident
+  insertTail : Ident
+  remove     : Ident
+  first      : Ident
+  nextFn     : Ident
+  prevFn     : Ident
+  inQ        : Ident
+  emptyQ     : Ident
+  size       : Ident
   deriving Repr, Inhabited, DecidableEq
 
 /-- `amc`'s naming: the link fields are `$name_next` / `$name_prev` on the
 element, the head and count are `$name_head` / `$name_n` on the parent. -/
 def names (dbC : Ident) (fld : Ident) : Names where
-  dbGlobal := "g_" ++ dbC
-  head     := fld ++ "_head"
-  count    := fld ++ "_n"
-  next     := fld ++ "_next"
-  prev     := fld ++ "_prev"
-  inlist   := fld ++ "_inlist"
-  init     := dbC ++ "_" ++ fld ++ "_Init"
-  insert   := dbC ++ "_" ++ fld ++ "_Insert"
-  remove   := dbC ++ "_" ++ fld ++ "_Remove"
-  first    := dbC ++ "_" ++ fld ++ "_First"
-  nextFn   := dbC ++ "_" ++ fld ++ "_Next"
-  prevFn   := dbC ++ "_" ++ fld ++ "_Prev"
-  inQ      := dbC ++ "_" ++ fld ++ "_InLlistQ"
-  emptyQ   := dbC ++ "_" ++ fld ++ "_EmptyQ"
-  size     := dbC ++ "_" ++ fld ++ "_N"
+  dbGlobal   := "g_" ++ dbC
+  head       := fld ++ "_head"
+  tail       := fld ++ "_tail"
+  count      := fld ++ "_n"
+  next       := fld ++ "_next"
+  prev       := fld ++ "_prev"
+  inlist     := fld ++ "_inlist"
+  init       := dbC ++ "_" ++ fld ++ "_Init"
+  insert     := dbC ++ "_" ++ fld ++ "_Insert"
+  insertTail := dbC ++ "_" ++ fld ++ "_InsertTail"
+  remove     := dbC ++ "_" ++ fld ++ "_Remove"
+  first      := dbC ++ "_" ++ fld ++ "_First"
+  nextFn     := dbC ++ "_" ++ fld ++ "_Next"
+  prevFn     := dbC ++ "_" ++ fld ++ "_Prev"
+  inQ        := dbC ++ "_" ++ fld ++ "_InLlistQ"
+  emptyQ     := dbC ++ "_" ++ fld ++ "_EmptyQ"
+  size       := dbC ++ "_" ++ fld ++ "_N"
 
 /-! ## Lvalue shorthands -/
 
@@ -193,6 +198,41 @@ def insertDef (nm : Names) (elem : Ident) : FunDef where
     , .when (.bin .ne (.rd (.var tmpOld)) (.null (.strct elem)))
         (.assign (ptrFld tmpOld nm.prev) (.rd (.var parRow)))
     , .assign (dbFld nm nm.head) (.rd (.var parRow))
+    , .assign (dbFld nm nm.count)
+        (.bin .add (.rd (dbFld nm nm.count)) (.lit (.u32 1))) ]
+
+/-- ```c
+void D_f_InsertTail(E *row) {
+  E *_old = NULL;
+  if (!row->f_inlist) {
+    _old = g_D.f_tail;
+    row->f_next   = NULL;
+    row->f_prev   = _old;
+    row->f_inlist = true;
+    if (_old != NULL) { _old->f_next = row; } else { g_D.f_head = row; }
+    g_D.f_tail = row;
+    g_D.f_n    = g_D.f_n + 1;
+  }
+}
+```
+Tail insertion: inserts at the tail of the intrusive doubly-linked list.
+When the list was empty (`_old == NULL`), sets head to `row`; otherwise
+links `_old->next = row`. In both cases updates `tail = row` and increments
+the element count. -/
+def insertTailDef (nm : Names) (elem : Ident) : FunDef where
+  name   := nm.insertTail
+  params := [(parRow, .ptr (.strct elem))]
+  ret    := none
+  locals := [ptrLocal tmpOld elem]
+  body   := .when (.un .lnot (.rd (ptrFld parRow nm.inlist))) <| .block
+    [ .assign (.var tmpOld) (.rd (dbFld nm nm.tail))
+    , .assign (ptrFld parRow nm.next) (.null (.strct elem))
+    , .assign (ptrFld parRow nm.prev) (.rd (.var tmpOld))
+    , .assign (ptrFld parRow nm.inlist) (.lit (.bool true))
+    , .cond (.bin .ne (.rd (.var tmpOld)) (.null (.strct elem)))
+        (.assign (ptrFld tmpOld nm.next) (.rd (.var parRow)))
+        (.assign (dbFld nm nm.head) (.rd (.var parRow)))
+    , .assign (dbFld nm nm.tail) (.rd (.var parRow))
     , .assign (dbFld nm nm.count)
         (.bin .add (.rd (dbFld nm nm.count)) (.lit (.u32 1))) ]
 
@@ -296,16 +336,16 @@ def sizeDef (nm : Names) : FunDef where
   locals := []
   body   := .ret (some (.rd (dbFld nm nm.count)))
 
-/-- The nine functions for one `Llist` field. -/
+/-- The ten functions for one `Llist` field. -/
 def defsFor (nm : Names) (elem : Ident) : List FunDef :=
-  [ initDef nm elem, insertDef nm elem, removeDef nm elem
+  [ initDef nm elem, insertDef nm elem, insertTailDef nm elem, removeDef nm elem
   , firstDef nm elem, nextDef nm elem, prevDef nm elem
   , inQDef nm elem, emptyQDef nm elem, sizeDef nm ]
 
 /-! ## Assembling a program
 
 The element struct gains the two links and the membership flag; the parent
-struct gains the head and the count. Neither is storage the schema declared —
+struct gains the head, the tail, and the count. Neither is storage the schema declared —
 which is the point of an *intrusive* list. -/
 
 /-- The element struct, with the list's own fields appended. -/
@@ -314,9 +354,11 @@ def elemFields (nm : Names) (elem : Ident) : List (Ident × Ty) :=
   , (nm.prev, .ptr (.strct elem))
   , (nm.inlist, .scalar .bool) ]
 
-/-- ...and what the parent's gains: the head and the count. -/
+/-- ...and what the parent's gains: the head, the tail, and the count. -/
 def dbFields (nm : Names) (elem : Ident) : List (Ident × Ty) :=
-  [(nm.head, .ptr (.strct elem)), (nm.count, .scalar .u32)]
+  [ (nm.head, .ptr (.strct elem))
+  , (nm.tail, .ptr (.strct elem))
+  , (nm.count, .scalar .u32) ]
 
 /-- **The generator.** Emits the list for the first `Llist` field of the parent
 ctype. `none` when the schema declares none — which `Dmmeta.check` reports on
@@ -433,13 +475,363 @@ structure NamesOk (nm : Names) : Prop where
   np : nm.next ≠ nm.prev
   nf : nm.next ≠ nm.inlist
   pf : nm.prev ≠ nm.inlist
+  ht : nm.head ≠ nm.tail
   hc : nm.head ≠ nm.count
+  tc : nm.tail ≠ nm.count
 
 theorem namesOk (dbC fld : Ident) : NamesOk (names dbC fld) where
   np := append_ne (by decide)
   nf := append_ne (by decide)
   pf := append_ne (by decide)
+  ht := append_ne (by decide)
   hc := append_ne (by decide)
+  tc := append_ne (by decide)
+
+/-! ## Concrete readers & List Decoders
+
+Accessors reading `head`, `tail`, `next`, `prev`, `inlist`, and `count`
+directly from `Mem`. These give a functional interface to the heap
+state of the intrusive list without referencing AST execution. -/
+
+/-- Read the head pointer from memory. Returns `none` if empty (NULL) or unreadable. -/
+def head (m : Mem) (nm : Names) : Option Path :=
+  match readMem m (dbPath nm nm.head) with
+  | some (.ptr p) => some p
+  | _ => none
+
+/-- Read the tail pointer from memory. Returns `none` if empty (NULL) or unreadable. -/
+def tail (m : Mem) (nm : Names) : Option Path :=
+  match readMem m (dbPath nm nm.tail) with
+  | some (.ptr p) => some p
+  | _ => none
+
+/-- Read the forward link of an element from memory. Returns `none` if NULL or unreadable. -/
+def next (m : Mem) (nm : Names) (p : Path) : Option Path :=
+  match readMem m (fldPath p nm.next) with
+  | some (.ptr q) => some q
+  | _ => none
+
+/-- Read the back link of an element from memory. Returns `none` if NULL or unreadable. -/
+def prev (m : Mem) (nm : Names) (p : Path) : Option Path :=
+  match readMem m (fldPath p nm.prev) with
+  | some (.ptr q) => some q
+  | _ => none
+
+/-- Read the membership flag of an element from memory. -/
+def inlist (m : Mem) (nm : Names) (p : Path) : Bool :=
+  match readMem m (fldPath p nm.inlist) with
+  | some (.bool b) => b
+  | _ => false
+
+/-- Read the element count from memory. -/
+def count (m : Mem) (nm : Names) : Nat :=
+  match readMem m (dbPath nm nm.count) with
+  | some (.u32 n) => n.toNat
+  | _ => 0
+
+/-- **`elems`**: Fuel-bounded list decoder for intrusive linked lists.
+Traverses forward links from `cur` up to `fuel` steps.
+Returns `some es` with the complete path sequence on normal termination at NULL,
+or `none` on fuel exhaustion, cycles, or memory corruption. -/
+def elems (m : Mem) (nm : Names) : Nat → Option Path → Option (List Path)
+  | _, none => some []
+  | 0, some _ => none
+  | fuel + 1, some p =>
+    match readMem m (fldPath p nm.next) with
+    | some .null => some [p]
+    | some (.ptr q) => do
+      let rest ← elems m nm fuel (some q)
+      some (p :: rest)
+    | _ => none
+
+/-- **`RepInv`**: Representation invariant for the intrusive doubly-linked list (`Llist`).
+Binds concrete heap memory layout to the abstract sequence `es = elems m nm fuel (head m nm)`. -/
+structure RepInv (m : Mem) (nm : Names) : Prop where
+  /-- Head and tail pointers are simultaneously empty or non-empty -/
+  head_tail  : head m nm = none ↔ tail m nm = none
+  /-- Link integrity: next and prev are inverses along the list -/
+  linked     : ∀ p q, next m nm p = some q → prev m nm q = some p
+  /-- Termination: exists sufficient fuel to decode the list from head -/
+  terminates : ∃ n es, elems m nm n (head m nm) = some es
+  /-- Membership flag soundness: `inlist` is true iff `p` is in the decoded list -/
+  inlist_iff : ∀ es, (∃ n, elems m nm n (head m nm) = some es) →
+                 ∀ p, inlist m nm p = true ↔ p ∈ es
+  /-- Count soundness: stored count equals decoded list length -/
+  count_eq   : ∀ es, (∃ n, elems m nm n (head m nm) = some es) →
+                 count m nm = es.length
+  /-- Tail soundness: tail pointer names the last element of the decoded list -/
+  tail_last  : ∀ es, (∃ n, elems m nm n (head m nm) = some es) →
+                 tail m nm = es.getLast?
+
+theorem elems_none (m : Mem) (nm : Names) (fuel : Nat) :
+    elems m nm fuel none = some [] := by
+  cases fuel <;> rfl
+
+theorem elems_zero_some (m : Mem) (nm : Names) (p : Path) :
+    elems m nm 0 (some p) = none := rfl
+
+theorem elems_mono (m : Mem) (nm : Names) :
+    ∀ (n n' : Nat) (cur : Option Path) (es : List Path),
+      n ≤ n' → elems m nm n cur = some es → elems m nm n' cur = some es := by
+  intro n
+  induction n with
+  | zero =>
+    intro n' cur es _ h
+    cases cur with
+    | none =>
+      cases n' <;> exact h
+    | some p =>
+      cases h
+  | succ n ih =>
+    intro n' cur es hle h
+    cases cur with
+    | none =>
+      cases n' <;> exact h
+    | some p =>
+      cases n' with
+      | zero => omega
+      | succ n' =>
+        have hle' : n ≤ n' := Nat.le_of_succ_le_succ hle
+        simp only [elems] at h ⊢
+        cases hrd : readMem m (fldPath p nm.next) with
+        | none => rw [hrd] at h; simp at h
+        | some v =>
+          rw [hrd] at h
+          cases v with
+          | null =>
+            simp only at h ⊢
+            exact h
+          | ptr q =>
+            simp only [bind, Option.bind_eq_some_iff] at h ⊢
+            obtain ⟨rest, hrest, heq⟩ := h
+            cases heq
+            refine ⟨rest, ih n' (some q) rest hle' hrest, rfl⟩
+          | _ => simp at h
+
+theorem elems_det (m : Mem) (nm : Names) :
+    ∀ (n1 n2 : Nat) (cur : Option Path) (es1 es2 : List Path),
+      elems m nm n1 cur = some es1 → elems m nm n2 cur = some es2 → es1 = es2 := by
+  intro n1 n2 cur es1 es2 h1 h2
+  rcases Nat.le_total n1 n2 with hle | hle
+  · have h1' := elems_mono m nm n1 n2 cur es1 hle h1
+    rw [h1'] at h2
+    exact Option.some.inj h2
+  · have h2' := elems_mono m nm n2 n1 cur es2 hle h2
+    rw [h2'] at h1
+    exact (Option.some.inj h1).symm
+
+theorem elems_implies_reaches (m : Mem) (nm : Names) :
+    ∀ (n : Nat) (cur : Option Path) (es : List Path),
+      elems m nm n cur = some es →
+      Reaches m nm.next (match cur with | some p => .ptr p | none => .null) es := by
+  intro n
+  induction n with
+  | zero =>
+    intro cur es h
+    cases cur with
+    | none =>
+      cases h
+      exact Reaches.nil
+    | some p =>
+      cases h
+  | succ n ih =>
+    intro cur es h
+    cases cur with
+    | none =>
+      cases h
+      exact Reaches.nil
+    | some p =>
+      simp only [elems] at h
+      cases hrd : readMem m (fldPath p nm.next) with
+      | none => rw [hrd] at h; simp at h
+      | some v =>
+        rw [hrd] at h
+        cases v with
+        | null =>
+          simp only at h
+          cases h
+          exact Reaches.cons hrd Reaches.nil
+        | ptr q =>
+          simp only [bind, Option.bind_eq_some_iff] at h
+          obtain ⟨rest, hrest, heq⟩ := h
+          cases heq
+          exact Reaches.cons hrd (ih (some q) rest hrest)
+        | _ => simp at h
+
+theorem reaches_implies_elems (m : Mem) (nm : Names) :
+    ∀ {h : Value} {qs : List Path},
+      Reaches m nm.next h qs →
+      ∀ fuel, fuel ≥ qs.length →
+        elems m nm (fuel + 1) (match h with | .ptr p => some p | _ => none) = some qs := by
+  intro h qs hr
+  induction hr with
+  | nil =>
+    intro fuel _
+    simp only [elems]
+  | @cons p v rest hrd hrc ih =>
+    intro fuel hlen
+    simp only [elems]
+    rw [hrd]
+    cases hrc with
+    | nil =>
+      rfl
+    | @cons q v' rest' hrd' hrc' =>
+      have ih' := ih (fuel - 1) (by
+        simp only [List.length_cons] at hlen ⊢
+        omega)
+      have hfuel : fuel - 1 + 1 = fuel := by
+        simp only [List.length_cons] at hlen ⊢
+        omega
+      rw [hfuel] at ih'
+      dsimp only
+      rw [ih']
+      rfl
+
+theorem reaches_headOf_implies_elems (m : Mem) (nm : Names) :
+    ∀ (qs : List Path),
+      Reaches m nm.next (headOf qs) qs →
+      ∀ fuel, fuel ≥ qs.length →
+        elems m nm (fuel + 1) (match headOf qs with | .ptr p => some p | _ => none) = some qs := by
+  intro qs hr
+  exact reaches_implies_elems m nm hr
+
+theorem elems_nodup (m : Mem) (nm : Names) :
+    ∀ (n : Nat) (cur : Option Path) (es : List Path),
+      elems m nm n cur = some es → es.Nodup := by
+  intro n cur es h
+  have hr := elems_implies_reaches m nm n cur es h
+  exact hr.nodup
+
+theorem elems_nil (m : Mem) (nm : Names) :
+    ∀ (n : Nat) (cur : Option Path),
+      elems m nm n cur = some [] → cur = none := by
+  intro n cur h
+  cases cur with
+  | none => rfl
+  | some p =>
+    cases n with
+    | zero => cases h
+    | succ n =>
+      simp only [elems] at h
+      cases hrd : readMem m (fldPath p nm.next) with
+      | none => rw [hrd] at h; simp at h
+      | some v =>
+        rw [hrd] at h
+        cases v with
+        | null => simp at h
+        | ptr q =>
+          simp only [bind, Option.bind_eq_some_iff] at h
+          obtain ⟨rest, _, heq⟩ := h
+          cases heq
+        | _ => simp at h
+
+theorem elems_head (m : Mem) (nm : Names) :
+    ∀ (n : Nat) (p : Path) (es : List Path),
+      elems m nm n (some p) = some es → es.head? = some p := by
+  intro n p es h
+  cases n with
+  | zero => cases h
+  | succ n =>
+    simp only [elems] at h
+    cases hrd : readMem m (fldPath p nm.next) with
+    | none => rw [hrd] at h; simp at h
+    | some v =>
+      rw [hrd] at h
+      cases v with
+      | null =>
+        simp only at h
+        cases h
+        rfl
+      | ptr q =>
+        simp only [bind, Option.bind_eq_some_iff] at h
+        obtain ⟨rest, _, heq⟩ := h
+        cases heq
+        rfl
+      | _ => simp at h
+
+theorem RepInv.unique_es {m : Mem} {nm : Names} :
+    ∀ n1 n2 es1 es2,
+      elems m nm n1 (head m nm) = some es1 →
+      elems m nm n2 (head m nm) = some es2 →
+      es1 = es2 := by
+  intro n1 n2 es1 es2 h1 h2
+  exact elems_det m nm n1 n2 (head m nm) es1 es2 h1 h2
+
+theorem RepInv.head_eq {m : Mem} {nm : Names} :
+    ∀ n es, elems m nm n (head m nm) = some es → head m nm = es.head? := by
+  intro n es h
+  cases hhd : head m nm with
+  | none =>
+    rw [hhd] at h
+    have hnil : es = [] := by
+      cases n with
+      | zero => simp only [elems] at h; exact Option.some.inj h.symm
+      | succ n => simp only [elems] at h; exact Option.some.inj h.symm
+    rw [hnil]; rfl
+  | some p =>
+    rw [hhd] at h
+    exact (elems_head m nm n p es h).symm
+
+theorem RepInv.tail_eq {m : Mem} {nm : Names} (hinv : RepInv m nm) :
+    ∀ n es, elems m nm n (head m nm) = some es → tail m nm = es.getLast? := by
+  intro n es h
+  exact hinv.tail_last es ⟨n, h⟩
+
+theorem RepInv.count_eq' {m : Mem} {nm : Names} (hinv : RepInv m nm) :
+    ∀ n es, elems m nm n (head m nm) = some es → count m nm = es.length := by
+  intro n es h
+  exact hinv.count_eq es ⟨n, h⟩
+
+theorem RepInv.inlist_eq {m : Mem} {nm : Names} (hinv : RepInv m nm) :
+    ∀ n es, elems m nm n (head m nm) = some es → ∀ p, inlist m nm p = true ↔ p ∈ es := by
+  intro n es h p
+  exact hinv.inlist_iff es ⟨n, h⟩ p
+
+theorem RepInv.nodup {m : Mem} {nm : Names} :
+    ∀ n es, elems m nm n (head m nm) = some es → es.Nodup := by
+  intro n es h
+  exact elems_nodup m nm n (head m nm) es h
+
+/-- **Empty list representation invariant.**
+A memory state with null head, null tail, zero count, and all elements not in list
+satisfies `RepInv`. -/
+theorem RepInv_empty {m : Mem} {nm : Names}
+    (hhd : head m nm = none)
+    (htl : tail m nm = none)
+    (hcnt : count m nm = 0)
+    (hlink : ∀ p q, next m nm p = some q → prev m nm q = some p)
+    (hflg : ∀ p, inlist m nm p = false) :
+    RepInv m nm where
+  head_tail := by rw [hhd, htl]
+  linked := hlink
+  terminates := ⟨0, [], by rw [hhd]; rfl⟩
+  inlist_iff := by
+    intro es ⟨n, hn⟩ p
+    rw [hhd] at hn
+    have heq : es = [] := by
+      cases n with
+      | zero => simp only [elems] at hn; exact Option.some.inj hn.symm
+      | succ n => simp only [elems] at hn; exact Option.some.inj hn.symm
+    subst heq
+    simp [hflg p]
+  count_eq := by
+    intro es ⟨n, hn⟩
+    rw [hhd] at hn
+    have heq : es = [] := by
+      cases n with
+      | zero => simp only [elems] at hn; exact Option.some.inj hn.symm
+      | succ n => simp only [elems] at hn; exact Option.some.inj hn.symm
+    subst heq
+    simp [hcnt]
+  tail_last := by
+    intro es ⟨n, hn⟩
+    rw [hhd] at hn
+    have heq : es = [] := by
+      cases n with
+      | zero => simp only [elems] at hn; exact Option.some.inj hn.symm
+      | succ n => simp only [elems] at hn; exact Option.some.inj hn.symm
+    subst heq
+    simp [htl]
 
 /-! ## The representation invariant
 
@@ -473,6 +865,25 @@ structure ListInv (m : Mem) (nm : Names) (rows qs : List Path) : Prop where
                        ∧ (readMem m (fldPath q nm.inlist)).isSome = true
   /-- The parent's own fields are not inside any row. -/
   parent   : ∀ q ∈ rows, q.overlaps (dbPath nm nm.head) = false
+                       ∧ q.overlaps (dbPath nm nm.count) = false
+
+/-- **`TailListInv`**: Representation invariant for the intrusive doubly-linked list
+with tail pointer. Tracks the explicit `qs` chain, head and tail pointers, back-links,
+membership flags, count, and row field readability. -/
+structure TailListInv (m : Mem) (nm : Names) (rows qs : List Path) : Prop where
+  sub      : ∀ q ∈ qs, q ∈ rows
+  disj     : RowsDisjoint rows
+  head     : readMem m (dbPath nm nm.head) = some (headOf qs)
+  tail     : readMem m (dbPath nm nm.tail) = some (lastOr qs .null)
+  chain    : Reaches m nm.next (headOf qs) qs
+  back     : Backlinked m nm.prev qs .null
+  flags    : Flagged m nm.inlist rows qs
+  count    : Counted m (dbPath nm nm.count) qs
+  fields   : ∀ q ∈ rows, (readMem m (fldPath q nm.next)).isSome = true
+                       ∧ (readMem m (fldPath q nm.prev)).isSome = true
+                       ∧ (readMem m (fldPath q nm.inlist)).isSome = true
+  parent   : ∀ q ∈ rows, q.overlaps (dbPath nm nm.head) = false
+                       ∧ q.overlaps (dbPath nm nm.tail) = false
                        ∧ q.overlaps (dbPath nm nm.count) = false
 
 /-! ## Disjointness, read off the invariant
@@ -733,6 +1144,32 @@ theorem insert_noop
     callFun_normal (p := p) (m := m) (fd := insertDef nm elem)
       (args := [Value.ptr q]) hlook hn rfl hbody
 
+/-- **`InsertTail` on a row already in the list does nothing.**
+
+checked by: `lake build` -/
+theorem insertTail_noop
+    (hlook : lookupFun p nm.insertTail = .ok (insertTailDef nm elem))
+    (hn : ∃ n, p.funs.length = n + 1)
+    (hread : readMem m (fldPath q nm.inlist) = some (.bool true)) :
+    callFun p m nm.insertTail [.ptr q] = .ok (m, none) := by
+  obtain ⟨n, hn⟩ := hn
+  have hloc : (m.toStore [(parRow, Value.ptr q), (tmpOld, Value.null)]).getLocal
+      parRow = some (.ptr q) := rfl
+  have hr : (m.toStore [(parRow, Value.ptr q), (tmpOld, Value.null)]).readPath
+      (fldPath q nm.inlist) = some (.bool true) := by
+    rw [readMem_toStore]; exact hread
+  have hbody : execAt p (execStmt p n) (insertTailDef nm elem).body
+      (m.toStore [(parRow, Value.ptr q), (tmpOld, Value.null)])
+      = .ok (m.toStore [(parRow, Value.ptr q), (tmpOld, Value.null)], .normal) := by
+    simp only [insertTailDef, Stmt.when]
+    rw [execAt_cond']
+    simp only [evalExpr, resolve_ptrFld hloc hr, readLoc, hr, bind, Except.bind,
+      evalUn, Bool.not_true]
+    rfl
+  simpa [insertTailDef] using
+    callFun_normal (p := p) (m := m) (fd := insertTailDef nm elem)
+      (args := [Value.ptr q]) hlook hn rfl hbody
+
 /-- **`Remove` on a row not in the list does nothing.**
 
 checked by: `lake build` -/
@@ -792,6 +1229,20 @@ def InsertLinks (nm : Names) (elem : Ident) : Prop :=
       ∧ readMem m' (fldPath q nm.prev) = some .null
       ∧ readMem m' (fldPath q nm.next) = readMem m (dbPath nm nm.head)
 
+/-- **`InsertTail` links a row at the tail.** -/
+def InsertTailLinks (nm : Names) (elem : Ident) : Prop :=
+  ∀ (p : Program) (m : Mem) (rows qs : List Path) (q : Path),
+    lookupFun p nm.insertTail = .ok (insertTailDef nm elem) →
+    (∃ n, p.funs.length = n + 1) →
+    NamesOk nm → TailListInv m nm rows qs → q ∈ rows →
+    readMem m (fldPath q nm.inlist) = some (.bool false) →
+    ∃ m', callFun p m nm.insertTail [.ptr q] = .ok (m', none)
+      ∧ TailListInv m' nm rows (qs ++ [q])
+      ∧ readMem m' (dbPath nm nm.tail) = some (.ptr q)
+      ∧ readMem m' (fldPath q nm.inlist) = some (.bool true)
+      ∧ readMem m' (fldPath q nm.next) = some .null
+      ∧ readMem m' (fldPath q nm.prev) = some (lastOr qs .null)
+
 /-- **`Remove` splices a row out.** -/
 def RemoveUnlinks (nm : Names) (elem : Ident) : Prop :=
   ∀ (p : Program) (m : Mem) (rows qs : List Path) (q : Path),
@@ -839,6 +1290,27 @@ theorem parent_ne_row (I : ListInv m nm rows qs) {r : Path} (hr : r ∈ rows)
   obtain ⟨h1, h2⟩ := row_ne_parent I hr x
   rw [overlaps_symm] at h1 h2
   exact ⟨h1, h2⟩
+
+theorem insert_disj' (I : TailListInv m nm rows qs)
+    (hqrow : q ∈ rows) {r : Path} (hr : r ∈ rows) (hrq : r ≠ q)
+    (x y : Ident) : (fldPath q x).overlaps (fldPath r y) = false :=
+  fldPath_disjoint (I.disj q hqrow r hr (fun e => hrq e.symm))
+
+theorem row_ne_parent' (I : TailListInv m nm rows qs) {r : Path} (hr : r ∈ rows)
+    (x : Ident) :
+    (fldPath r x).overlaps (dbPath nm nm.head) = false
+    ∧ (fldPath r x).overlaps (dbPath nm nm.tail) = false
+    ∧ (fldPath r x).overlaps (dbPath nm nm.count) = false :=
+  ⟨overlaps_ext (I.parent r hr).1, overlaps_ext (I.parent r hr).2.1, overlaps_ext (I.parent r hr).2.2⟩
+
+theorem parent_ne_row' (I : TailListInv m nm rows qs) {r : Path} (hr : r ∈ rows)
+    (x : Ident) :
+    (dbPath nm nm.head).overlaps (fldPath r x) = false
+    ∧ (dbPath nm nm.tail).overlaps (fldPath r x) = false
+    ∧ (dbPath nm nm.count).overlaps (fldPath r x) = false := by
+  obtain ⟨h1, h2, h3⟩ := row_ne_parent' I hr x
+  rw [overlaps_symm] at h1 h2 h3
+  exact ⟨h1, h2, h3⟩
 
 
 /-- **What `Insert`'s body does.** Six writes at pairwise-disjoint paths, and
@@ -2019,6 +2491,407 @@ theorem removeUnlinks {nm : Names} {elem : Ident} : RemoveUnlinks nm elem := by
   · rw [readMem_toMem]; exact hnext'
   · rw [readMem_toMem]; exact hprev'
 
+/-- **What `InsertTail`'s body does.** Operational execution of `insertTailDef.body`
+advancing the store and preserving `TailListInv` for `qs ++ [q]`. -/
+theorem exec_insertTailBody {σ : Store}
+    (hno : NamesOk nm) (I : TailListInv σ.toMem nm rows qs) (hqrow : q ∈ rows)
+    (hflag : σ.readPath (fldPath q nm.inlist) = some (.bool false))
+    (hlocRow : σ.getLocal parRow = some (.ptr q))
+    (hlocOld : (σ.getLocal tmpOld).isSome = true) :
+    ∃ σ', execAt p (execStmt p n) (insertTailDef nm elem).body σ = .ok (σ', .normal)
+      ∧ TailListInv σ'.toMem nm rows (qs ++ [q])
+      ∧ σ'.readPath (dbPath nm nm.tail) = some (.ptr q)
+      ∧ σ'.readPath (fldPath q nm.inlist) = some (.bool true)
+      ∧ σ'.readPath (fldPath q nm.next) = some .null
+      ∧ σ'.readPath (fldPath q nm.prev) = some (lastOr qs .null) := by
+  have RM : ∀ pth, readMem σ.toMem pth = σ.readPath pth := readMem_toMem σ
+  have hqnot : q ∉ qs := fun hmem => by
+    have h := (I.flags q hqrow).mpr hmem
+    rw [RM, hflag] at h
+    exact absurd h (by simp)
+  have hhead : σ.readPath (dbPath nm nm.head) = some (headOf qs) := by
+    rw [← RM]; exact I.head
+  have htail : σ.readPath (dbPath nm nm.tail) = some (lastOr qs .null) := by
+    rw [← RM]; exact I.tail
+  have hcount : σ.readPath (dbPath nm nm.count)
+      = some (.u32 (UInt32.ofNat qs.length)) := by rw [← RM]; exact I.count
+  obtain ⟨nv, hqnext⟩ : ∃ v, σ.readPath (fldPath q nm.next) = some v := by
+    have h := (I.fields q hqrow).1; rw [RM] at h
+    exact Option.isSome_iff_exists.mp h
+  obtain ⟨pv, hqprev⟩ : ∃ v, σ.readPath (fldPath q nm.prev) = some v := by
+    have h := (I.fields q hqrow).2.1; rw [RM] at h
+    exact Option.isSome_iff_exists.mp h
+  have dNP : (fldPath q nm.next).overlaps (fldPath q nm.prev) = false :=
+    fldPath_ne_disjoint hno.np
+  have dPN : (fldPath q nm.prev).overlaps (fldPath q nm.next) = false :=
+    fldPath_ne_disjoint (Ne.symm hno.np)
+  have dPF : (fldPath q nm.prev).overlaps (fldPath q nm.inlist) = false :=
+    fldPath_ne_disjoint hno.pf
+  have dNF : (fldPath q nm.next).overlaps (fldPath q nm.inlist) = false :=
+    fldPath_ne_disjoint hno.nf
+  have dFP : (fldPath q nm.inlist).overlaps (fldPath q nm.prev) = false :=
+    fldPath_ne_disjoint (Ne.symm hno.pf)
+  have dFN : (fldPath q nm.inlist).overlaps (fldPath q nm.next) = false :=
+    fldPath_ne_disjoint (Ne.symm hno.nf)
+  have dHT : (dbPath nm nm.head).overlaps (dbPath nm nm.tail) = false :=
+    dbPath_disjoint hno.ht
+  have dHC : (dbPath nm nm.head).overlaps (dbPath nm nm.count) = false :=
+    dbPath_disjoint hno.hc
+  have dTC : (dbPath nm nm.tail).overlaps (dbPath nm nm.count) = false :=
+    dbPath_disjoint hno.tc
+  have hguard : evalExpr σ (.un .lnot (.rd (ptrFld parRow nm.inlist)))
+      = .ok (.bool true) := by
+    show (do let v ← evalExpr σ (.rd (ptrFld parRow nm.inlist));
+             evalUn .lnot v) = _
+    rw [read_ptrFld hlocRow hflag]
+    rfl
+  -- S1: `_old = g.tail`
+  obtain ⟨ov, hov⟩ := Option.isSome_iff_exists.mp hlocOld
+  obtain ⟨σ1, hσ1⟩ : ∃ t, t = σ.setLocal tmpOld (lastOr qs .null) := ⟨_, rfl⟩
+  have hS1 : execAt p (execStmt p n)
+      (.assign (.var tmpOld) (.rd (dbFld nm nm.tail))) σ = .ok (σ1, .normal) := by
+    rw [hσ1]; exact step_local hov (read_dbFld htail)
+  have hr1 : ∀ pth, σ1.readPath pth = σ.readPath pth := by
+    intro pth; rw [hσ1]; exact readPath_setLocal _ _ _ _
+  have hl1row : σ1.getLocal parRow = some (.ptr q) := by
+    rw [hσ1, getLocal_setLocal_ne (by decide)]; exact hlocRow
+  have hl1old : σ1.getLocal tmpOld = some (lastOr qs .null) := by
+    rw [hσ1]; exact getLocal_setLocal_self hov
+  -- S2: `row->next = NULL`
+  obtain ⟨σ2, hS2, hl2, hw2, hf2⟩ := step_ptr (p := p) (callee := execStmt p n)
+    (x := nm.next) (e := .null (.strct elem)) (w := Value.null)
+    hl1row (by rw [hr1]; exact hqnext) rfl
+  have hl2row : σ2.getLocal parRow = some (.ptr q) := by
+    simp only [Store.getLocal, hl2]; exact hl1row
+  have hl2old : σ2.getLocal tmpOld = some (lastOr qs .null) := by
+    simp only [Store.getLocal, hl2]; exact hl1old
+  -- S3: `row->prev = _old`
+  obtain ⟨σ3, hS3, hl3, hw3, hf3⟩ := step_ptr (p := p) (callee := execStmt p n)
+    (x := nm.prev) (e := .rd (.var tmpOld)) (w := lastOr qs .null)
+    hl2row (by rw [hf2 _ dNP, hr1]; exact hqprev) (read_local' hl2old)
+  have hl3row : σ3.getLocal parRow = some (.ptr q) := by
+    simp only [Store.getLocal, hl3]; exact hl2row
+  have hl3old : σ3.getLocal tmpOld = some (lastOr qs .null) := by
+    simp only [Store.getLocal, hl3]; exact hl2old
+  -- S4: `row->inlist = true`
+  obtain ⟨σ4, hS4, hl4, hw4, hf4⟩ := step_ptr (p := p) (callee := execStmt p n)
+    (x := nm.inlist) (e := .lit (.bool true)) (w := Value.bool true)
+    hl3row (by rw [hf3 _ dPF, hf2 _ dNF, hr1]; exact hflag) rfl
+  have hl4row : σ4.getLocal parRow = some (.ptr q) := by
+    simp only [Store.getLocal, hl4]; exact hl3row
+  have hl4old : σ4.getLocal tmpOld = some (lastOr qs .null) := by
+    simp only [Store.getLocal, hl4]; exact hl3old
+  have hrowP : ∀ r ∈ rows, ∀ x,
+      (fldPath r x).overlaps (dbPath nm nm.head) = false
+      ∧ (fldPath r x).overlaps (dbPath nm nm.tail) = false
+      ∧ (fldPath r x).overlaps (dbPath nm nm.count) = false :=
+    fun r hr x => row_ne_parent' I hr x
+  -- S5: `if (_old != NULL) { _old->next = row; } else { g.head = row; }`
+  obtain ⟨σ5, hS5, hl5, hw5_head, hw5_tail_next, hf5⟩ :
+      ∃ σ5, execAt p (execStmt p n)
+          (Stmt.cond (.bin .ne (.rd (.var tmpOld)) (.null (.strct elem)))
+            (.assign (ptrFld tmpOld nm.next) (.rd (.var parRow)))
+            (.assign (dbFld nm nm.head) (.rd (.var parRow)))) σ4
+            = .ok (σ5, .normal)
+        ∧ σ5.loc = σ4.loc
+        ∧ (qs = [] → σ5.readPath (dbPath nm nm.head) = some (.ptr q))
+        ∧ (∀ tail_node, qs.getLast? = some tail_node →
+            σ5.readPath (fldPath tail_node nm.next) = some (.ptr q))
+        ∧ (∀ r, (qs = [] → (dbPath nm nm.head).overlaps r = false) →
+                (∀ tail_node, qs.getLast? = some tail_node →
+                  (fldPath tail_node nm.next).overlaps r = false) →
+            σ5.readPath r = σ4.readPath r) := by
+    cases hlast : qs.getLast? with
+    | none =>
+      have hnil : qs = [] := List.getLast?_eq_none_iff.mp hlast
+      have hlastOr_nil : lastOr qs .null = .null := by rw [hnil]; rfl
+      have hhead4 : σ4.readPath (dbPath nm nm.head) = some .null := by
+        rw [hf4 _ (hrowP q hqrow nm.inlist).1,
+            hf3 _ (hrowP q hqrow nm.prev).1,
+            hf2 _ (hrowP q hqrow nm.next).1, hr1, hhead, hnil]; rfl
+      obtain ⟨σ5, hS, hl, hw, hf⟩ := step_db (p := p) (callee := execStmt p n)
+        (x := nm.head) (e := .rd (.var parRow)) (w := Value.ptr q) hhead4
+        (read_local' hl4row)
+      refine ⟨σ5, ?_, hl, ?_, ?_, ?_⟩
+      · rw [execAt_cond']
+        have hg : evalExpr σ4 (.bin .ne (.rd (.var tmpOld)) (.null (.strct elem)))
+            = .ok (.bool false) := by
+          simp only [evalExpr, resolve, readLoc, bind, Except.bind, evalBin,
+            show σ4.getLocal tmpOld = some Value.null from by
+              rw [hl4old, hlastOr_nil]]
+        rw [hg]; exact hS
+      · intro _; exact hw
+      · intro tail_node htl; nomatch htl
+      · intro r hr1_none _
+        exact hf r (hr1_none hnil)
+    | some tail_node =>
+      have htn_mem : tail_node ∈ qs := getLast?_mem hlast
+      have htn_row : tail_node ∈ rows := I.sub tail_node htn_mem
+      have htn_ne : tail_node ≠ q := fun e => hqnot (e ▸ htn_mem)
+      obtain ⟨tn_nv, htn_nv⟩ : ∃ v, σ.readPath (fldPath tail_node nm.next) = some v := by
+        have h := (I.fields tail_node htn_row).1; rw [RM] at h
+        exact Option.isSome_iff_exists.mp h
+      have dq_tn : ∀ x y, (fldPath q x).overlaps (fldPath tail_node y) = false :=
+        fun x y => insert_disj' I hqrow htn_row htn_ne x y
+      have hlastOr_some : lastOr qs .null = .ptr tail_node :=
+        lastOr_nonempty qs .null tail_node hlast
+      obtain ⟨σ5, hS, hl, hw, hf⟩ := step_ptr (p := p) (callee := execStmt p n)
+        (ptr := tmpOld) (x := nm.next) (q := tail_node) (e := .rd (.var parRow))
+        (w := Value.ptr q) (by rw [hl4old, hlastOr_some])
+        (by rw [hf4 _ (dq_tn _ _), hf3 _ (dq_tn _ _), hf2 _ (dq_tn _ _), hr1]; exact htn_nv)
+        (read_local' hl4row)
+      refine ⟨σ5, ?_, hl, ?_, ?_, ?_⟩
+      · rw [execAt_cond']
+        have hg : evalExpr σ4 (.bin .ne (.rd (.var tmpOld)) (.null (.strct elem)))
+            = .ok (.bool true) := by
+          simp only [evalExpr, resolve, readLoc, bind, Except.bind, evalBin,
+            show σ4.getLocal tmpOld = some (Value.ptr tail_node) from by
+              rw [hl4old, hlastOr_some]]
+        rw [hg]; exact hS
+      · intro hnil; rw [hnil] at hlast; simp at hlast
+      · intro tail_node' htl
+        cases Option.some.inj htl
+        exact hw
+      · intro r _ hr2_some
+        exact hf r (hr2_some tail_node rfl)
+  have htn_parent_next : ∀ tail_node, qs.getLast? = some tail_node →
+      (fldPath tail_node nm.next).overlaps (dbPath nm nm.tail) = false
+      ∧ (fldPath tail_node nm.next).overlaps (dbPath nm nm.head) = false
+      ∧ (fldPath tail_node nm.next).overlaps (dbPath nm nm.count) = false := by
+    intro tail_node htl
+    have htn_mem := getLast?_mem htl
+    have htn_row := I.sub tail_node htn_mem
+    obtain ⟨h1, h2, h3⟩ := row_ne_parent' I htn_row nm.next
+    exact ⟨h2, h1, h3⟩
+  have htail5 : σ5.readPath (dbPath nm nm.tail) = some (lastOr qs .null) := by
+    rw [hf5 _ (fun _ => (dbPath_disjoint hno.ht))
+      (fun tail_node htl => (htn_parent_next tail_node htl).1),
+      hf4 _ (hrowP q hqrow nm.inlist).2.1,
+      hf3 _ (hrowP q hqrow nm.prev).2.1,
+      hf2 _ (hrowP q hqrow nm.next).2.1, hr1, htail]
+  -- S6: `g.tail = row`
+  obtain ⟨σ6, hS6, hl6, hw6, hf6⟩ := step_db (p := p) (callee := execStmt p n)
+    (x := nm.tail) (e := .rd (.var parRow)) (w := Value.ptr q) htail5
+    (read_local' (by simp only [Store.getLocal, hl5]; exact hl4row))
+  have hcount6 : σ6.readPath (dbPath nm nm.count)
+      = some (.u32 (UInt32.ofNat qs.length)) := by
+    rw [hf6 _ dTC, hf5 _ (fun _ => (dbPath_disjoint hno.hc))
+      (fun tail_node htl => (htn_parent_next tail_node htl).2.2),
+      hf4 _ (hrowP q hqrow nm.inlist).2.2,
+      hf3 _ (hrowP q hqrow nm.prev).2.2,
+      hf2 _ (hrowP q hqrow nm.next).2.2, hr1, hcount]
+  -- S7: `g.n = g.n + 1`
+  obtain ⟨σ7, hS7, hl7, hw7, hf7⟩ := step_db (p := p) (callee := execStmt p n)
+    (x := nm.count) (e := .bin .add (.rd (dbFld nm nm.count)) (.lit (.u32 1)))
+    (w := Value.u32 (UInt32.ofNat qs.length + 1)) hcount6
+    (by
+      show (do evalBin .add (← evalExpr σ6 (.rd (dbFld nm nm.count)))
+                 (← evalExpr σ6 (.lit (.u32 1)))) = _
+      rw [read_dbFld hcount6]
+      rfl)
+  have RM7 : ∀ pth, readMem σ7.toMem pth = σ7.readPath pth := readMem_toMem σ7
+  have d5 : ∀ x, (∀ tail_node, qs.getLast? = some tail_node →
+      (fldPath tail_node nm.next).overlaps (fldPath q x) = false) := by
+    intro x tail_node htl
+    have htn_mem := getLast?_mem htl
+    have htn_row := I.sub tail_node htn_mem
+    have htn_ne : tail_node ≠ q := fun e => hqnot (e ▸ htn_mem)
+    exact fldPath_disjoint (I.disj tail_node htn_row q hqrow htn_ne)
+  have d5_head : (dbPath nm nm.head).overlaps (fldPath q nm.prev) = false :=
+    (parent_ne_row' I hqrow nm.prev).1
+  have d5_head_next : (dbPath nm nm.head).overlaps (fldPath q nm.next) = false :=
+    (parent_ne_row' I hqrow nm.next).1
+  have d5_head_inlist : (dbPath nm nm.head).overlaps (fldPath q nm.inlist) = false :=
+    (parent_ne_row' I hqrow nm.inlist).1
+  have hqprev7 : σ7.readPath (fldPath q nm.prev) = some (lastOr qs .null) := by
+    rw [hf7 _ (parent_ne_row' I hqrow nm.prev).2.2,
+      hf6 _ (parent_ne_row' I hqrow nm.prev).2.1,
+      hf5 _ (fun _ => d5_head) (d5 nm.prev),
+      hf4 _ dFP]
+    exact hw3
+  have hqnext7 : σ7.readPath (fldPath q nm.next) = some .null := by
+    rw [hf7 _ (parent_ne_row' I hqrow nm.next).2.2,
+      hf6 _ (parent_ne_row' I hqrow nm.next).2.1,
+      hf5 _ (fun _ => d5_head_next) (d5 nm.next),
+      hf4 _ dFN, hf3 _ dPN]
+    exact hw2
+  have hqflag7 : σ7.readPath (fldPath q nm.inlist) = some (.bool true) := by
+    rw [hf7 _ (parent_ne_row' I hqrow nm.inlist).2.2,
+      hf6 _ (parent_ne_row' I hqrow nm.inlist).2.1,
+      hf5 _ (fun _ => d5_head_inlist) (d5 nm.inlist)]
+    exact hw4
+  have htail7 : σ7.readPath (dbPath nm nm.tail) = some (.ptr q) := by
+    rw [hf7 _ (dbPath_disjoint (Ne.symm hno.tc))]; exact hw6
+  have hhead7 : σ7.readPath (dbPath nm nm.head) = some (headOf (qs ++ [q])) := by
+    rw [headOf_snoc]
+    cases hqs : qs with
+    | nil =>
+      rw [hf7 _ (dbPath_disjoint (Ne.symm hno.hc)),
+        hf6 _ (dbPath_disjoint (Ne.symm hno.ht))]
+      exact hw5_head hqs
+    | cons q0 qs0 =>
+      rw [hf7 _ (dbPath_disjoint (Ne.symm hno.hc)),
+        hf6 _ (dbPath_disjoint (Ne.symm hno.ht))]
+      have hlast_some : ∃ tail_node, (q0 :: qs0).getLast? = some tail_node := by
+        cases h : (q0 :: qs0).getLast? with
+        | none => have heq := List.getLast?_eq_none_iff.mp h; nomatch heq
+        | some t => exact ⟨t, rfl⟩
+      obtain ⟨tail_node, htl⟩ := hlast_some
+      rw [hf5 _ (fun hnil => by rw [hnil] at hqs; nomatch hqs) (fun tn htn => (htn_parent_next tn htn).2.1),
+        hf4 _ (hrowP q hqrow nm.inlist).1,
+        hf3 _ (hrowP q hqrow nm.prev).1,
+        hf2 _ (hrowP q hqrow nm.next).1, hr1, hhead, hqs]
+      rfl
+  have hOther : ∀ r ∈ rows, r ≠ q → ∀ x : Ident,
+      (∀ tail_node, qs.getLast? = some tail_node →
+        (fldPath tail_node nm.next).overlaps (fldPath r x) = false) →
+      readMem σ7.toMem (fldPath r x) = readMem σ.toMem (fldPath r x) := by
+    intro r hr hrq x h5
+    rw [RM7, RM,
+      hf7 _ (parent_ne_row' I hr x).2.2,
+      hf6 _ (parent_ne_row' I hr x).2.1,
+      hf5 _ (fun _ => (parent_ne_row' I hr x).1) h5,
+      hf4 _ (insert_disj' I hqrow hr hrq nm.inlist x),
+      hf3 _ (insert_disj' I hqrow hr hrq nm.prev x),
+      hf2 _ (insert_disj' I hqrow hr hrq nm.next x),
+      hr1]
+  have hNotTailNext : ∀ r ∈ rows, ∀ x : Ident, (x ≠ nm.next ∨ ∀ tail_node, qs.getLast? = some tail_node → r ≠ tail_node) →
+      ∀ tail_node, qs.getLast? = some tail_node → (fldPath tail_node nm.next).overlaps (fldPath r x) = false := by
+    intro r hr x hx tail_node htl
+    have htn_mem := getLast?_mem htl
+    have htn_row := I.sub tail_node htn_mem
+    rcases hx with hx | hne
+    · by_cases he : tail_node = r
+      · subst he; exact fldPath_ne_disjoint (Ne.symm hx)
+      · exact fldPath_disjoint (I.disj tail_node htn_row r hr he)
+    · exact fldPath_disjoint (I.disj tail_node htn_row r hr (Ne.symm (hne tail_node htl)))
+  refine ⟨σ7, ?_, ?_, htail7, hqflag7, hqnext7, hqprev7⟩
+  · simp only [insertTailDef, Stmt.when]
+    rw [execAt_cond', hguard]
+    simp only [bind, Except.bind, Stmt.block]
+    rw [execAt_seq', hS1]; simp only [bind, Except.bind]
+    rw [execAt_seq', hS2]; simp only [bind, Except.bind]
+    rw [execAt_seq', hS3]; simp only [bind, Except.bind]
+    rw [execAt_seq', hS4]; simp only [bind, Except.bind]
+    rw [execAt_seq', hS5]; simp only [bind, Except.bind]
+    rw [execAt_seq', hS6]; simp only [bind, Except.bind]
+    exact hS7
+  refine ⟨?_, I.disj, by rw [RM7]; exact hhead7, ?_, ?_, ?_, ?_, ?_, ?_, I.parent⟩
+  · intro r hr
+    simp only [List.mem_append, List.mem_singleton] at hr
+    rcases hr with h | rfl
+    · exact I.sub r h
+    · exact hqrow
+  · -- tail pointer
+    show readMem σ7.toMem (dbPath nm nm.tail) = _
+    rw [RM7, htail7, lastOr_append_singleton]
+  · -- chain Reaches
+    refine Reaches.snoc qs q I.chain ?_ ?_ (by rw [RM7]; exact hqnext7)
+    · intro r hr hnot_last
+      exact hOther r (I.sub r hr) (fun e => hqnot (e ▸ hr)) nm.next
+        (hNotTailNext r (I.sub r hr) nm.next (Or.inr hnot_last))
+    · intro tail_node htl
+      have htn_mem := getLast?_mem htl
+      have htn_row := I.sub tail_node htn_mem
+      have htn_ne : tail_node ≠ q := fun e => hqnot (e ▸ htn_mem)
+      rw [RM7, hf7 _ (parent_ne_row' I htn_row nm.next).2.2,
+        hf6 _ (parent_ne_row' I htn_row nm.next).2.1]
+      exact hw5_tail_next tail_node htl
+  · -- prev is the inverse
+    refine Backlinked.snoc qs q ?_ (by rw [RM7]; exact hqprev7)
+    refine Backlinked.frame qs .null I.back ?_
+    intro r hr
+    have hr_row := I.sub r hr
+    have hr_ne : r ≠ q := fun e => hqnot (e ▸ hr)
+    exact hOther r hr_row hr_ne nm.prev
+      (hNotTailNext r hr_row nm.prev (Or.inl (Ne.symm hno.np)))
+  · -- the flag
+    refine Flagged.snoc I.flags hqrow (by rw [RM7]; exact hqflag7) ?_
+    intro r hr hrq
+    exact hOther r hr hrq nm.inlist
+      (hNotTailNext r hr nm.inlist (Or.inl (Ne.symm hno.nf)))
+  · -- the count
+    show readMem σ7.toMem (dbPath nm nm.count) = _
+    rw [RM7, hw7, List.length_append, List.length_singleton, uint32_ofNat_succ]
+  · -- every live row still has its three fields
+    intro r hr
+    by_cases hrq : r = q
+    · subst hrq
+      exact ⟨by rw [RM7, hqnext7]; rfl, by rw [RM7, hqprev7]; rfl,
+        by rw [RM7, hqflag7]; rfl⟩
+    · refine ⟨?_, ?_, ?_⟩
+      · match hlast : qs.getLast? with
+        | none =>
+          rw [hOther r hr hrq nm.next (by intro tn htn; rw [hlast] at htn; simp at htn)]
+          exact (I.fields r hr).1
+        | some tail_node =>
+          have htn_mem := getLast?_mem hlast
+          have htn_row := I.sub tail_node htn_mem
+          by_cases htn_eq : r = tail_node
+          · rw [htn_eq, RM7, hf7 _ (parent_ne_row' I htn_row nm.next).2.2,
+              hf6 _ (parent_ne_row' I htn_row nm.next).2.1,
+              hw5_tail_next tail_node hlast]
+            rfl
+          · rw [hOther r hr hrq nm.next (hNotTailNext r hr nm.next (Or.inr (fun tn htn => by
+              rw [hlast] at htn; cases Option.some.inj htn; exact htn_eq)))]
+            exact (I.fields r hr).1
+      · rw [hOther r hr hrq nm.prev (hNotTailNext r hr nm.prev (Or.inl (Ne.symm hno.np)))]
+        exact (I.fields r hr).2.1
+      · rw [hOther r hr hrq nm.inlist (hNotTailNext r hr nm.inlist (Or.inl (Ne.symm hno.nf)))]
+        exact (I.fields r hr).2.2
+
+/-- **`InsertTail` links a row at the tail.**
+
+checked by: `lake build` -/
+theorem insertTailLinks {nm : Names} {elem : Ident} : InsertTailLinks nm elem := by
+  intro p m rows qs q hlook hn hno I hqrow hflag
+  obtain ⟨n, hn⟩ := hn
+  have hI : TailListInv (m.toStore [(parRow, Value.ptr q),
+      (tmpOld, Value.null)]).toMem nm rows qs := by rw [Mem.toStore_toMem]; exact I
+  obtain ⟨σ', hbody, I', htail', hflag', hnext', hprev'⟩ :=
+    exec_insertTailBody (p := p) (n := n) (elem := elem)
+      (σ := m.toStore [(parRow, Value.ptr q), (tmpOld, Value.null)])
+      hno hI hqrow (by rw [readMem_toStore]; exact hflag) rfl rfl
+  refine ⟨σ'.toMem, ?_, I', ?_, ?_, ?_, ?_⟩
+  · exact callFun_normal (p := p) (m := m) (fd := insertTailDef nm elem)
+      (args := [Value.ptr q]) hlook hn rfl hbody
+  · rw [readMem_toMem]; exact htail'
+  · rw [readMem_toMem]; exact hflag'
+  · rw [readMem_toMem]; exact hnext'
+  · rw [readMem_toMem]; exact hprev'
+
+theorem head_eq_headOf (m : Mem) (nm : Names) (qs : List Path)
+    (hhd : readMem m (dbPath nm nm.head) = some (headOf qs)) :
+    head m nm = match headOf qs with | .ptr p => some p | _ => none := by
+  simp only [head, hhd]
+  cases headOf qs <;> rfl
+
+/-- **`insertTail_correct`**: Data refinement theorem for intrusive FIFO list insertion.
+Connecting operational `callFun` execution of `insertTailDef` on memory `m`
+to fuel-bounded decoder stepping `elems m' nm (fuel + 2) (head m' nm) = some (qs ++ [q])`.
+
+checked by: `lake build` -/
+theorem insertTail_correct
+    (hlook : lookupFun p nm.insertTail = .ok (insertTailDef nm elem))
+    (hn : ∃ n, p.funs.length = n + 1)
+    (hno : NamesOk nm)
+    (I : TailListInv m nm rows qs)
+    (hqrow : q ∈ rows)
+    (hflag : readMem m (fldPath q nm.inlist) = some (.bool false)) :
+    ∃ m', callFun p m nm.insertTail [.ptr q] = .ok (m', none)
+      ∧ TailListInv m' nm rows (qs ++ [q])
+      ∧ elems m' nm (qs.length + 2) (head m' nm) = some (qs ++ [q]) := by
+  obtain ⟨m', hcall, I', htail', hflag', hnext', hprev'⟩ :=
+    insertTailLinks p m rows qs q hlook hn hno I hqrow hflag
+  have helems : elems m' nm ((qs ++ [q]).length + 1)
+      (match headOf (qs ++ [q]) with | .ptr p => some p | _ => none) = some (qs ++ [q]) := by
+    exact reaches_headOf_implies_elems m' nm (qs ++ [q]) I'.chain ((qs ++ [q]).length) (by omega)
+  have hlen : (qs ++ [q]).length + 1 = qs.length + 2 := by simp
+  rw [hlen] at helems
+  have hhead_eq := head_eq_headOf m' nm (qs ++ [q]) I'.head
+  rw [← hhead_eq] at helems
+  exact ⟨m', hcall, I', helems⟩
+
 end Proofs
 
 /-! ## Checked -/
@@ -2090,25 +2963,88 @@ checked by: `lake build` -/
 example : (genLlist Examples.nestedDb).map (fun p => p.structs.map StructDef.name)
     = some ["pt", "task_row", "TaskDb"] := rfl
 
-/-- The nine operations, in `amc`'s naming.
+/-- The ten operations, in `amc`'s naming.
 
 checked by: `lake build` -/
 example : (genLlist Examples.listDb).map (fun p => p.funs.map FunDef.name)
     = some ["TaskDb_zdl_todo_Init", "TaskDb_zdl_todo_Insert",
+            "TaskDb_zdl_todo_InsertTail",
             "TaskDb_zdl_todo_Remove", "TaskDb_zdl_todo_First",
             "TaskDb_zdl_todo_Next", "TaskDb_zdl_todo_Prev",
             "TaskDb_zdl_todo_InLlistQ", "TaskDb_zdl_todo_EmptyQ",
             "TaskDb_zdl_todo_N"] := rfl
 
-/-- The element carries the links and the flag; the parent carries the head and
-the count. Neither is storage the schema declared.
+/-- The element carries the links and the flag; the parent carries the head,
+the tail, and the count. Neither is storage the schema declared.
 
 checked by: `lake build` -/
 example : (genLlist Examples.listDb).map
     (fun p => p.structs.map (fun sd => (sd.name, sd.fields.map Prod.fst)))
     = some [("task_row", ["id", "zdl_todo_next", "zdl_todo_prev",
                           "zdl_todo_inlist"]),
-            ("TaskDb", ["zdl_todo_head", "zdl_todo_n"])] := rfl
+            ("TaskDb", ["zdl_todo_head", "zdl_todo_tail", "zdl_todo_n"])] := rfl
+
+/-! ### Decoder Witnesses
+
+Kernel-checked (`rfl`) decodings covering:
+1. Empty list decode
+2. Single-element list decode
+3. Two-element list decode
+4. Cyclic structure fuel-exhaustion -> `none`
+5. Corrupt field type -> `none`
+-/
+
+def testNm : Names := names "TaskDb" "zdl_todo"
+
+def p1 : Path := ⟨.blk 1, []⟩
+def p2 : Path := ⟨.blk 2, []⟩
+
+def mEmpty : Mem :=
+  { glb := [("g_TaskDb", .strct [("zdl_todo_head", .null), ("zdl_todo_tail", .null), ("zdl_todo_n", .u32 0)])]
+  , hp := []
+  , next := 1 }
+
+def mOne : Mem :=
+  { glb := [("g_TaskDb", .strct [("zdl_todo_head", .ptr p1), ("zdl_todo_tail", .ptr p1), ("zdl_todo_n", .u32 1)])]
+  , hp := [(1, .strct [("id", .u64 10), ("zdl_todo_next", .null), ("zdl_todo_prev", .null), ("zdl_todo_inlist", .bool true)])]
+  , next := 2 }
+
+def mTwo : Mem :=
+  { glb := [("g_TaskDb", .strct [("zdl_todo_head", .ptr p1), ("zdl_todo_tail", .ptr p2), ("zdl_todo_n", .u32 2)])]
+  , hp := [ (1, .strct [("id", .u64 10), ("zdl_todo_next", .ptr p2), ("zdl_todo_prev", .null), ("zdl_todo_inlist", .bool true)])
+          , (2, .strct [("id", .u64 20), ("zdl_todo_next", .null), ("zdl_todo_prev", .ptr p1), ("zdl_todo_inlist", .bool true)]) ]
+  , next := 3 }
+
+def mCycle : Mem :=
+  { glb := [("g_TaskDb", .strct [("zdl_todo_head", .ptr p1), ("zdl_todo_tail", .ptr p1), ("zdl_todo_n", .u32 1)])]
+  , hp := [(1, .strct [("id", .u64 10), ("zdl_todo_next", .ptr p1), ("zdl_todo_prev", .null), ("zdl_todo_inlist", .bool true)])]
+  , next := 2 }
+
+def mCorrupt : Mem :=
+  { glb := [("g_TaskDb", .strct [("zdl_todo_head", .ptr p1), ("zdl_todo_tail", .ptr p1), ("zdl_todo_n", .u32 1)])]
+  , hp := [(1, .strct [("id", .u64 10), ("zdl_todo_next", .u32 42), ("zdl_todo_prev", .null), ("zdl_todo_inlist", .bool true)])]
+  , next := 2 }
+
+example : head mEmpty testNm = none := rfl
+example : tail mEmpty testNm = none := rfl
+example : count mEmpty testNm = 0 := rfl
+example : elems mEmpty testNm 5 (head mEmpty testNm) = some [] := rfl
+
+example : head mOne testNm = some p1 := rfl
+example : tail mOne testNm = some p1 := rfl
+example : count mOne testNm = 1 := rfl
+example : elems mOne testNm 5 (head mOne testNm) = some [p1] := rfl
+
+example : head mTwo testNm = some p1 := rfl
+example : tail mTwo testNm = some p2 := rfl
+example : count mTwo testNm = 2 := rfl
+example : elems mTwo testNm 5 (head mTwo testNm) = some [p1, p2] := rfl
+
+example : elems mCycle testNm 0 (head mCycle testNm) = none := rfl
+example : elems mCycle testNm 1 (head mCycle testNm) = none := rfl
+example : elems mCycle testNm 2 (head mCycle testNm) = none := rfl
+
+example : elems mCorrupt testNm 5 (head mCorrupt testNm) = none := rfl
 
 end Checks
 

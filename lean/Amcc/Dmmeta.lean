@@ -603,7 +603,7 @@ collision only exists when the stripped prefix is **itself a declared field
 name**, because that is the only way a template generates the colliding name.
 `clashesGenerated` below is that narrower test. -/
 def genSuffixes : List String :=
-  [ "_next", "_prev", "_inlist", "_inhash", "_buckets", "_head", "_n"
+  [ "_next", "_prev", "_inlist", "_inhash", "_buckets", "_head", "_tail", "_n"
   , "_freenext", "_freehead" ]
 
 /-- Strip a suffix, if it is one. Reversed, so the suffix test is a **prefix**
