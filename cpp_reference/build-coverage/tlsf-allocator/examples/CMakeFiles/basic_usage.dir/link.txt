@@ -1,0 +1,1 @@
+/usr/bin/c++ -O0 -g --coverage -fprofile-arcs -ftest-coverage -g --coverage CMakeFiles/basic_usage.dir/basic_usage.cpp.o -o basic_usage 

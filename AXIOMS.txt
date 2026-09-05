@@ -1,0 +1,14 @@
+'VerifiedCMatchingEngine.c_first_spec' depends on axioms: [propext, Quot.sound]
+'VerifiedCMatchingEngine.c_first_spec_decodes' depends on axioms: [propext, Quot.sound]
+'VerifiedCMatchingEngine.c_next_spec' depends on axioms: [propext, Quot.sound]
+'VerifiedCMatchingEngine.c_next_spec_decodes' depends on axioms: [propext, Quot.sound]
+'VerifiedCMatchingEngine.EngineDb_bids_First_spec' does not depend on any axioms
+'VerifiedCMatchingEngine.EngineDb_asks_First_spec' does not depend on any axioms
+'VerifiedCMatchingEngine.amcc_memory_contract_implies_matcher_invariants' does not depend on any axioms
+'VerifiedCMatchingEngine.wf_mem_implies_AllInv' does not depend on any axioms
+'VerifiedCMatchingEngine.top_of_book_match_sound' depends on axioms: [propext, Quot.sound]
+'VerifiedCMatchingEngine.matching_engine_execution_sound' depends on axioms: [propext, Quot.sound]
+'VerifiedCMatchingEngine.c_matching_engine_end_to_end_sound' depends on axioms: [propext, Quot.sound]
+'process_STPGuarantee' depends on axioms: [propext, Quot.sound]
+'process_PostOnlyGuarantee' depends on axioms: [propext, Quot.sound]
+'process_preserves_BookInvariant' depends on axioms: [propext, Classical.choice, Quot.sound]

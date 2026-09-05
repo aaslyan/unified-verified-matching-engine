@@ -1,0 +1,54 @@
+===================================================================
+   VERIFIED C MATCHING ENGINE RUNS (c/bench/bench_matching_engine)
+===================================================================
+Executing matching workload: 1000000 orders...
+
+--- Performance Results ---
+  Workload        : 1000000 mixed operations (Inserts, Matches, Cancels)
+  Elapsed Time    : 0.0695 seconds
+  Throughput      : 14.39 Million orders/sec
+  Average Latency : 69.51 ns/order
+  Total Trades    : 348096 fills
+  Total Volume    : 3623996 shares traded
+
+--- Verification & Invariant Checking ---
+  Book Invariant (Uncrossed Bids < Asks) : [PASS]
+  Active Orders in Hash Index            : 282637
+  Active Bids Price Levels               : 79
+  Active Asks Price Levels               : 80
+
+===================================================================
+   DETAILED LATENCY PROFILING (c/bench/profile_matching_engine)
+===================================================================
+┌──────────────────────────────────┬─────────────────┬─────────────────┐
+│ Operation / Pipeline Stage       │ Mean Latency    │ Operations/Sec  │
+├──────────────────────────────────┼─────────────────┼─────────────────┤
+│ 1. Limit Order Placement (Resting)│   54.28 ns/op   │  18.42 M ops/sec │
+│ 2. Order Hash Lookup (Thash)     │   54.97 ns/op   │  18.19 M ops/sec │
+│ 3. Multi-Level Crossing Match    │  237.88 ns/op   │   4.20 M ops/sec │
+│ 4. Order Cancellation            │  127.39 ns/op   │   7.85 M ops/sec │
+└──────────────────────────────────┴─────────────────┴─────────────────┘
+
+===================================================================
+   C++ REFERENCE ENGINE BENCHMARK (cpp_reference/build/test_performance)
+===================================================================
+--- Deep-Book Benchmark ---
+Total ops:    11586879
+Trades:       10000000
+Trade ratio:  86.3%
+Time:         3.069 s
+Ops/sec:      3.78 M
+Trades/sec:   3.26 M
+Avg trade:    307 ns
+───────────────────────────────────────────
+Peak orders:       484546
+Orders allocated:  23174758
+Orders freed:      22690871
+Peak levels:       20
+Active orders:     483887
+Active levels:     10
+
+===================================================================
+   CORRECTNESS TESTS (cpp_reference/build/test_correctness)
+===================================================================
+Results: 65 passed, 0 failed

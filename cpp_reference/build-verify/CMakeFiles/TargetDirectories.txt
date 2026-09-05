@@ -1,0 +1,6 @@
+/home/aaslyan/verified-matching-engine/matcher_stl/build-verify/CMakeFiles/test_correctness.dir
+/home/aaslyan/verified-matching-engine/matcher_stl/build-verify/CMakeFiles/test_performance.dir
+/home/aaslyan/verified-matching-engine/matcher_stl/build-verify/CMakeFiles/conformance_harness.dir
+/home/aaslyan/verified-matching-engine/matcher_stl/build-verify/CMakeFiles/shadow_test.dir
+/home/aaslyan/verified-matching-engine/matcher_stl/build-verify/CMakeFiles/edit_cache.dir
+/home/aaslyan/verified-matching-engine/matcher_stl/build-verify/CMakeFiles/rebuild_cache.dir

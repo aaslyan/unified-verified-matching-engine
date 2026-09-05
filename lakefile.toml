@@ -1,0 +1,19 @@
+name = "unified_verified_matching_engine"
+version = "0.1.0"
+defaultTargets = ["UnifiedVerifiedMatchingEngine"]
+
+[[lean_lib]]
+name = "Amcc"
+srcDir = "lean"
+
+[[lean_lib]]
+name = "MatchingEngine"
+srcDir = "lean"
+
+[[lean_lib]]
+name = "Bridge"
+srcDir = "lean"
+
+[[lean_lib]]
+name = "UnifiedVerifiedMatchingEngine"
+srcDir = "lean"

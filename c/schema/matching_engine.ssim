@@ -1,0 +1,23 @@
+dmmeta.ctype  ctype:Order        comment:"Order record in pool and index"
+dmmeta.ctype  ctype:PriceLevel   comment:"Price level in the book"
+dmmeta.ctype  ctype:EngineDb     comment:"Central in-memory matching engine database"
+
+dmmeta.field  field:Order.id             arg:u64         reftype:Pkey     comment:"Unique order ID"
+dmmeta.field  field:Order.side           arg:u8          reftype:Val      comment:"0=Buy, 1=Sell"
+dmmeta.field  field:Order.price          arg:u64         reftype:Val      comment:"Limit price"
+dmmeta.field  field:Order.qty            arg:u64         reftype:Val      comment:"Original order quantity"
+dmmeta.field  field:Order.remaining_qty  arg:u64         reftype:Val      comment:"Remaining unfilled quantity"
+dmmeta.field  field:Order.p_price_level  arg:PriceLevel  reftype:Upptr    comment:"Pointer to owning price level"
+
+dmmeta.field  field:PriceLevel.price     arg:u64         reftype:Pkey     comment:"Price point"
+dmmeta.field  field:PriceLevel.total_qty arg:u64         reftype:Val      comment:"Aggregated depth at price"
+dmmeta.field  field:PriceLevel.orders    arg:Order       reftype:Llist    comment:"FIFO price-time priority order queue"
+
+dmmeta.field  field:EngineDb.ind_order   arg:Order       reftype:Thash    comment:"O(1) Hash table lookup by order ID"
+dmmeta.field  field:EngineDb.bids        arg:PriceLevel  reftype:Atree    comment:"Descending price tree for bids"
+dmmeta.field  field:EngineDb.asks        arg:PriceLevel  reftype:Atree    comment:"Ascending price tree for asks"
+dmmeta.field  field:EngineDb.order_pool  arg:Order       reftype:Inlary   comment:"Dynamic recyclable order pool"
+
+dmmeta.inlary  field:EngineDb.order_pool  min:0  max:1000000  comment:"1M order pool capacity"
+
+amcc.root  ctype:EngineDb  comment:""

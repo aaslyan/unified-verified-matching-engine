@@ -1,0 +1,26 @@
+[
+{
+  "directory": "/home/aaslyan/verified-matching-engine/matcher_stl/build-verify",
+  "command": "/usr/bin/c++  -I/home/aaslyan/verified-matching-engine/matcher_stl/src -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles/test_correctness.dir/tests/test_correctness.cpp.o -c /home/aaslyan/verified-matching-engine/matcher_stl/tests/test_correctness.cpp",
+  "file": "/home/aaslyan/verified-matching-engine/matcher_stl/tests/test_correctness.cpp",
+  "output": "CMakeFiles/test_correctness.dir/tests/test_correctness.cpp.o"
+},
+{
+  "directory": "/home/aaslyan/verified-matching-engine/matcher_stl/build-verify",
+  "command": "/usr/bin/c++  -I/home/aaslyan/verified-matching-engine/matcher_stl/src -O3 -DNDEBUG -std=gnu++17 -O3 -march=native -o CMakeFiles/test_performance.dir/tests/test_performance.cpp.o -c /home/aaslyan/verified-matching-engine/matcher_stl/tests/test_performance.cpp",
+  "file": "/home/aaslyan/verified-matching-engine/matcher_stl/tests/test_performance.cpp",
+  "output": "CMakeFiles/test_performance.dir/tests/test_performance.cpp.o"
+},
+{
+  "directory": "/home/aaslyan/verified-matching-engine/matcher_stl/build-verify",
+  "command": "/usr/bin/c++  -I/home/aaslyan/verified-matching-engine/matcher_stl/src -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles/conformance_harness.dir/tools/conformance/conformance_harness.cpp.o -c /home/aaslyan/verified-matching-engine/matcher_stl/tools/conformance/conformance_harness.cpp",
+  "file": "/home/aaslyan/verified-matching-engine/matcher_stl/tools/conformance/conformance_harness.cpp",
+  "output": "CMakeFiles/conformance_harness.dir/tools/conformance/conformance_harness.cpp.o"
+},
+{
+  "directory": "/home/aaslyan/verified-matching-engine/matcher_stl/build-verify",
+  "command": "/usr/bin/c++  -I/home/aaslyan/verified-matching-engine/matcher_stl/src -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles/shadow_test.dir/tools/conformance/shadow_test.cpp.o -c /home/aaslyan/verified-matching-engine/matcher_stl/tools/conformance/shadow_test.cpp",
+  "file": "/home/aaslyan/verified-matching-engine/matcher_stl/tools/conformance/shadow_test.cpp",
+  "output": "CMakeFiles/shadow_test.dir/tools/conformance/shadow_test.cpp.o"
+}
+]

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O0 -g --coverage -fprofile-arcs -ftest-coverage -g --coverage CMakeFiles/shadow_test.dir/tools/conformance/shadow_test.cpp.o -o shadow_test 

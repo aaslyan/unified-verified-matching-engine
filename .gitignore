@@ -1,0 +1,26 @@
+# Build directories and artifacts
+.lake/
+bin/
+*.olean
+*.ilean
+
+# Profiling and debug output
+dhat.out.*
+
+# OS generated files
+.DS_Store
+._*
+
+# LaTeX intermediate build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# TLA+ model checker output directories
+tla/experiments/
+tla/states/
+

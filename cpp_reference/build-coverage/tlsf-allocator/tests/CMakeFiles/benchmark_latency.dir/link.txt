@@ -1,0 +1,1 @@
+/usr/bin/c++ -O0 -g --coverage -fprofile-arcs -ftest-coverage -g --coverage CMakeFiles/benchmark_latency.dir/benchmark_latency.cpp.o -o benchmark_latency 
