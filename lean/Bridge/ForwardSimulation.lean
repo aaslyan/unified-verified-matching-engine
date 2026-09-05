@@ -66,7 +66,7 @@ theorems linking C big-step operational evaluation (`execStmt`) to abstract limi
 
 **Prerequisites to close the forward simulation bridge:**
 1. **`Llist` Refinement**: Implement `Llist.elems` decoder, `Llist.RepInv`, and `InsertTail`/`Remove` simulation laws
-   (building on the existing 32 reader theorems in `Amcc.Templates.LlistWf`).
+   (building on the existing 32 reader theorems in `Amcc.Templates.Llist`).
 2. **`Atree` Refinement**: Implement `Atree.RepInv` + `Atree.elems` + `InsertRefines` (generalizing the `TreeBoundedBST`
    formalism proved in Step 3).
 3. **Composite Multi-Template `genC`**: Extend AMCC's code generator beyond single `ArrayTable` schemas to synthesize
