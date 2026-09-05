@@ -2,9 +2,9 @@ name = "unified_verified_matching_engine"
 version = "0.1.0"
 defaultTargets = ["UnifiedVerifiedMatchingEngine"]
 
-[[lean_lib]]
+[[require]]
 name = "Amcc"
-srcDir = "lean"
+path = "../amcc"
 
 [[lean_lib]]
 name = "MatchingEngine"

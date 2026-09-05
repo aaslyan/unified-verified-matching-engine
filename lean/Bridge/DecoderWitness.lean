@@ -130,7 +130,7 @@ example : alpha_concrete m_corrupt_tree (some ⟨Root.blk 2, []⟩) none = none 
 
 
 /-- Fuel exhaustion strictly fails (returns none) -/
-example : decodeOrderListAux m_valid_single 0 (some ⟨Root.blk 1, []⟩) = none := rfl
+example : decodeOrderListWithFuel m_valid_single 0 (some ⟨Root.blk 1, []⟩) = none := rfl
 example : decodePriceLevelsAux m_valid_single 0 (some ⟨Root.blk 2, []⟩) = none := rfl
 
 end VerifiedCMatchingEngine

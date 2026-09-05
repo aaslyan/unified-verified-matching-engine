@@ -1,5 +1,12 @@
 {"version": "1.1.0",
  "packagesDir": ".lake/packages",
- "packages": [],
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "Amcc",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../amcc",
+   "configFile": "lakefile.toml"}],
  "name": "unified_verified_matching_engine",
  "lakeDir": ".lake"}

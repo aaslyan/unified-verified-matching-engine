@@ -37,24 +37,17 @@ def decodeOrder (m : Mem) (p : Path) : Option Order :=
     some { id := oid, account := acc, price := px, qty := qty, side := side }
   | _, _, _, _, _ => none
 
-/-- Decodes a finite intrusive doubly-linked list (Llist) of orders starting from head path. -/
-def decodeOrderListAux (m : Mem) : Nat → Option Path → Option (List Order)
-  | 0, _ => none
-  | _, none => some []
-  | n + 1, some p =>
-    match decodeOrder m p with
-    | some ord =>
-      match (m.toStore ∅).readPath (fldPath p "orders_next") with
-      | some Value.null => some [ord]
-      | some (Value.ptr next_p) =>
-        match decodeOrderListAux m n (some next_p) with
-        | some rest => some (ord :: rest)
-        | none => none
-      | _ => none
-    | none => none
+/-- Canonical AMCC names for intrusive price level order list (`PriceLevel.orders`). -/
+def ordersNm : Templates.Llist.Names := Templates.Llist.names "PriceLevel" "orders"
+
+/-- Decodes a finite intrusive doubly-linked list (`Llist`) of orders starting from head path
+    by composing AMCC's verified `Templates.Llist.elems` decoder with row-level `decodeOrder`. -/
+def decodeOrderListWithFuel (m : Mem) (fuel : Nat) (head : Option Path) : Option (List Order) := do
+  let paths ← Templates.Llist.elems m ordersNm fuel head
+  paths.mapM (decodeOrder m)
 
 def decodeOrderList (m : Mem) (head : Option Path) : Option (List Order) :=
-  decodeOrderListAux m 1000000 head
+  decodeOrderListWithFuel m 1000000 head
 
 /-- Decodes a PriceLevel structure from AMCC memory. -/
 def decodePriceLevel (m : Mem) (p : Path) : Option PriceLevel :=
@@ -116,29 +109,42 @@ theorem c_first_spec {p : Program} {m : Mem} {nm : Templates.Llist.Names} {elem 
 
 theorem decodeOrderList_head (m : Mem) (q : Path) (n : Nat) (ord : Order)
     (h_ord : decodeOrder m q = some ord)
-    (hnext : (m.toStore ∅).readPath (fldPath q "orders_next") = some Value.null) :
-    decodeOrderListAux m (n + 1) (some q) = some [ord] := by
-  unfold decodeOrderListAux
-  rw [h_ord, hnext]
+    (hnext : readMem m (fldPath q "orders_next") = some Value.null) :
+    decodeOrderListWithFuel m (n + 1) (some q) = some [ord] := by
+  simp only [decodeOrderListWithFuel, bind, Option.bind_eq_some_iff]
+  refine ⟨[q], ?_, ?_⟩
+  · have hfld : fldPath q ordersNm.next = fldPath q "orders_next" := rfl
+    simp only [Templates.Llist.elems]
+    rw [hfld, hnext]
+  · simp only [List.mapM_cons, h_ord, List.mapM_nil, bind, pure]
+    rfl
 
 theorem decodeOrderList_cons (m : Mem) (q next_p : Path) (n : Nat) (ord : Order) (rest : List Order)
     (h_ord : decodeOrder m q = some ord)
-    (hnext : (m.toStore ∅).readPath (fldPath q "orders_next") = some (Value.ptr next_p))
-    (h_rest : decodeOrderListAux m n (some next_p) = some rest) :
-    decodeOrderListAux m (n + 1) (some q) = some (ord :: rest) := by
-  unfold decodeOrderListAux
-  rw [h_ord, hnext]
-  dsimp
-  rw [h_rest]
+    (hnext : readMem m (fldPath q "orders_next") = some (Value.ptr next_p))
+    (h_rest : decodeOrderListWithFuel m n (some next_p) = some rest) :
+    decodeOrderListWithFuel m (n + 1) (some q) = some (ord :: rest) := by
+  simp only [decodeOrderListWithFuel, bind, Option.bind_eq_some_iff] at h_rest ⊢
+  obtain ⟨rest_paths, hpaths, hrest_ord⟩ := h_rest
+  refine ⟨q :: rest_paths, ?_, ?_⟩
+  · have hfld : fldPath q ordersNm.next = fldPath q "orders_next" := rfl
+    simp only [Templates.Llist.elems]
+    rw [hfld, hnext]
+    simp only [bind]
+    rw [hpaths]
+    rfl
+  · simp only [List.mapM_cons, h_ord, bind]
+    rw [hrest_ord]
+    rfl
 
 theorem c_first_spec_decodes {p : Program} {m : Mem} {nm : Templates.Llist.Names} {elem : Ident} {q : Path} {ord : Order}
     (hlook : lookupFun p nm.first = .ok (Templates.Llist.firstDef nm elem))
     (hn : ∃ n, p.funs.length = n + 1)
     (hread : readMem m (Templates.Llist.dbPath nm nm.head) = some (Value.ptr q))
     (hdec : decodeOrder m q = some ord)
-    (hnext : (m.toStore ∅).readPath (fldPath q "orders_next") = some Value.null) :
+    (hnext : readMem m (fldPath q "orders_next") = some Value.null) :
     callFun p m nm.first [] = .ok (m, some (Value.ptr q)) ∧
-    decodeOrderListAux m 1000000 (some q) = some [ord] := by
+    decodeOrderList m (some q) = some [ord] := by
   refine ⟨Templates.Llist.first_correct hlook hn hread, ?_⟩
   exact decodeOrderList_head m q 999999 ord hdec hnext
 
@@ -155,11 +161,21 @@ theorem c_next_spec_decodes {p : Program} {m : Mem} {nm : Templates.Llist.Names}
     (hn : ∃ n, p.funs.length = n + 1)
     (hread : readMem m (fldPath q nm.next) = some (Value.ptr next_p))
     (hdec : decodeOrder m next_p = some next_ord)
-    (hnext : (m.toStore ∅).readPath (fldPath next_p "orders_next") = some Value.null) :
+    (hnext : readMem m (fldPath next_p "orders_next") = some Value.null) :
     callFun p m nm.nextFn [Value.ptr q] = .ok (m, some (Value.ptr next_p)) ∧
-    decodeOrderListAux m 1000000 (some next_p) = some [next_ord] := by
+    decodeOrderList m (some next_p) = some [next_ord] := by
   refine ⟨Templates.Llist.next_correct hlook hn hread, ?_⟩
   exact decodeOrderList_head m next_p 999999 next_ord hdec hnext
+
+/-- Bridge fact connecting `Templates.Llist.TailListInv` and `Templates.Llist.llist_fifo`
+    directly to abstract `decodeOrderListWithFuel` order decoding. -/
+theorem decodeOrderList_from_tailListInv {m : Mem} {rows : List Path} {qs : List Path} {ords : List Order}
+    (I : Templates.Llist.TailListInv m ordersNm rows qs)
+    (hdec : qs.mapM (decodeOrder m) = some ords) :
+    decodeOrderListWithFuel m (qs.length + 1) (Templates.Llist.head m ordersNm) = some ords := by
+  simp only [decodeOrderListWithFuel, bind, Option.bind_eq_some_iff]
+  have ⟨helems, _, _⟩ := Templates.Llist.llist_fifo m ordersNm rows qs I
+  refine ⟨qs, helems, hdec⟩
 
 /-- Operational C Specification: Atree Best Bid (EngineDb_bids_First) -/
 theorem EngineDb_bids_First_spec
