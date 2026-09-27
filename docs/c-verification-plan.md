@@ -1,5 +1,7 @@
 # C Engine Verification Plan
 
+> **Superseded** by plan v2 (`docs/plan-v2/PLAN.md`) for the method and the steps. Kept as the record of Prompts 1–3.
+
 ## Target
 
 The verified artifact is not the handwritten `c/src/matching_engine.c`. It is
