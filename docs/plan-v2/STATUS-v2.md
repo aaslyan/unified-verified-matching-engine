@@ -1,51 +1,80 @@
 # STATUS-v2
 
-## Phase 4 — Refinement proof (in progress: checkpoint before the matching loop)
+## Phase 4 — Refinement proof (complete)
 
-**Date:** 2026-09-27. **Base commit:** `14e7477`. **Checkpoint commit:** see `git log -- docs/plan-v2/LOOP-INVARIANT.md`.
+**Date:** 2026-09-27. **Base commit:** `14e7477`. **Checkpoint commit:** `d176c71`. **Phase commit:** see `git log -- lean/Matcher/Accept.lean`.
 
-**Pre-proof checks (from the Phase 3 review)**
-1. **Evaluation order.** No expression in the printed matcher contains more than one store call that changes state: every state-changing operation (`ext`, `call`, `emit`, `assign`) is a statement in the language, and expressions contain only pure arithmetic and store reads (`getO`, `getL`, `capacity`, `count`). The rule and the argument are in `FRAGMENT.md` ("Evaluation order"). Nested-call generation is added to the Phase 5 semantics test plan (`PLAN.md`, "Decisions after Phase 3").
-2. **C differential at small capacity** (`scripts/matcher_c_capacity.sh`), capacity 8 (seeds 1–40 × 300 calls) and capacity 3 (seeds 100–139 × 300): every seed diverges, and **every first divergence is of one class**. That class is recorded here as **an expected divergence, not a failure**:
-   - **Expected divergence class "capacity".** A LIMIT or POST_ONLY request arrives while the store holds `capacity` orders. The generated matcher returns the capacity code **before any trade** (the v2 rule, `processB`). The handwritten engine has no such rule: its pools hold millions of rows, so it matches and rests. The script fails on any first divergence outside this class, and on any `CheckInvariants` failure of the generated build.
-3. **Lean differential kept as a regression** (`scripts/matcher_lean_diff.sh`, capacities 2, 6, 20): 27,000 steps, 0 mismatches after the Phase 4 refactor of `Program.lean`. The refactor splits the bodies into `processOrderStmts`/`cancelOrderStmts`, and `matcher.c` is byte-identical.
+**Main theorem** (`lean/Matcher/Accept.lean`; axioms `propext`, `Classical.choice`, `Quot.sound`):
 
-**Files added or changed**
+```
+theorem matcher_refines [EngineDb S] (hcap : CapOk S) {s : S} (hI : Inv s) (req : Req) : Refines s req
+theorem inv_init [EngineDb S] : Inv (EngineDb.init : S)
+```
+
+For every store satisfying `Inv` and every request, the program's entry:
+- runs to completion without error (no contract violation, overflow, invalid handle, exhausted bound or full trade buffer);
+- returns `codeOf` of `processB`'s result code;
+- emits `processB`'s trades under `tradeObs`;
+- leaves a store whose `bookView` is `processB`'s and that satisfies `Inv` again.
+
+`CapOk S` (`capacity + 1 < 2^64`) is an explicit hypothesis, not an `Inv` clause. `Inv` is as stated at the checkpoint.
+
+**Proof structure**
+
+| Part | Theorem | File |
+|---|---|---|
+| Entry rejections, cancel | `refines_static`, `refines_duplicate`, `refines_capacity`, `refines_cancel` | `Refines.lean`, `Cancel.lean` (checkpoint) |
+| Spec: fuel stability, the remaining computation, one step per `doMatch` branch, the accepted-order pipeline | `doMatch_fuel_stable`, `rest_step`, `step_*`, `processWithId_match`, `processWithId_postOnly` | `SpecStep.lean` |
+| Store: `InvM`, `Frame`, `absSide_best`, head removal, remaining write, level free | `drop_clientInvM`, `setRem_clientInvM`, `free_clientInv`, … | `StoreStep.lean` |
+| Program: the side function's statements | `sideFun_body` (rfl), one `ev_*` lemma per statement | `LoopEnv.lean` |
+| (a) inner body = one `doMatch` step | `inner_body` (`inner_cancelNew`, `inner_cancelOld`, `inner_dec`, `inner_fill`) | `Inner.lean` |
+| (b) inner loop, bound `capacity + 1` | `inner_loop` | `Inner.lean` |
+| (c) outer body | `outer_body` | `Outer.lean` |
+| (d) outer loop, bound `capacity + 1`; at exit `mr = term …` | `outer_loop` | `Outer.lean` |
+| (e) resting, result code, assembly | `rest_run`, `rest_book`, `rest_inv`, `side_run`, `refines_accept`, `matcher_refines` | `Rest.lean`, `Accept.lean` |
+
+About 4,500 new lines in seven files, 213 theorems. The invariant as proved is in `LOOP-INVARIANT.md`, including three deviations from the checkpoint report: the empty level is handled structurally, the own-side clause is exact equality, and the clause `stopX` was added.
+
+**Decisions from the checkpoint review, applied**
+- The rest of the run is stated at the spec's own fuel (`rest σ := dm (matchMeasure σ + 1) σ`), with a new fuel-stability lemma (`doMatch_fuel_stable`). The repository had no `doMatch` monotonicity lemma to reuse.
+- No result code distinguishes a filled incoming order from one cancelled by STP (every accepted order returns `accepted`, and `dispose` treats both alike). So the cancelled flag is folded into `rem = 0` (clause `aggr`).
+- `Program.lean` is unchanged (`c/gen/matcher.c` byte-identical, `gen_matcher.sh --check`). `Inv` holds at outer boundaries; `InvM s l` holds inside an outer iteration.
+- No branch of the inner body failed to map to a `doMatch` unfolding, so there is no ⚑ item.
+
+**Pre-proof items from the checkpoint review**
+- **Read purity.** Store reads must be observationally pure. `FRAGMENT.md` ("Evaluation order") now says so, and it is a Phase 5 contract-test item (`PLAN.md`, "Decisions for the matching loop").
+- **Small-capacity C differential** (`scripts/matcher_c_capacity.sh`). A POST_ONLY at a full store that both engines reject is compared, and the seed goes on. The public API reports only accepted/rejected, so post-only-rejected and capacity-rejected look alike. A seed ends at its first state-diverging call.
+  - **Expected divergence class "capacity"** (not a failure): a LIMIT, or a non-crossing POST_ONLY, arrives at a full store. The generated matcher rejects it before any trade; the handwritten engine, which has no capacity rule, rests it.
+  - Any other first divergence fails the script, and so does any `CheckInvariants` failure.
+
+| Capacity, seeds | Mean calls compared per seed | Diverged on LIMIT | Diverged on POST_ONLY | Full-store POST_ONLY rejected by both, seed continued |
+|---|---|---|---|---|
+| 8, seeds 1–40 × 300 | 64.3 | 35 | 5 | 12 |
+| 3, seeds 100–139 × 300 | 14.2 | 35 | 5 | 12 |
+
+- **Lean differential count.** The checkpoint's 27,000 steps came from running 150 streams; Phase 3's 72,000 came from the default 400 streams (400 × 60 requests × 3 capacities). The script is unchanged and still covers capacities 2, 6 and 20, where the store fills at capacity 2.
+
+**Files added or changed in this part**
 
 | File | Change |
 |---|---|
-| `lean/Matcher/Logic.lean` | New. Fuel monotonicity; `Eval` (evaluation for some fuel) with one rule per statement form; `LoopRun` for bounded loops; one `runExt_*` lemma per extern operation. |
-| `lean/Matcher/Refines.lean` | New. `Inv`, `CapOk`, `specStep`, `Refines`; the entry checks; the four rejections; cancel of an unknown id. |
-| `lean/Matcher/Cancel.lean` | New. Cancel of a resting order, including the level-removal case; `refines_cancel`. |
-| `lean/Matcher/Program.lean` | Bodies as statement lists (no change to the printed C). |
-| `docs/plan-v2/LOOP-INVARIANT.md` | New. **The review point:** the matching-loop invariant. |
-| `docs/plan-v2/FRAGMENT.md`, `PLAN.md` | Evaluation order; decisions after Phase 3. |
-| `scripts/matcher_lean_diff.sh`, `scripts/matcher_c_capacity.sh`, `c/tests/diff_driver.c` | Regression and capacity runs; the driver prints the store size before each call. |
+| `lean/Matcher/SpecStep.lean`, `StoreStep.lean`, `LoopEnv.lean`, `Inner.lean`, `Outer.lean`, `Rest.lean`, `Accept.lean` | New (above). |
+| `lean/UnifiedVerifiedMatchingEngine.lean` | Imports. |
+| `docs/plan-v2/LOOP-INVARIANT.md` | Rewritten to the invariant as proved. |
+| `docs/plan-v2/FRAGMENT.md`, `PLAN.md` | Read purity; decisions for the matching loop. |
+| `scripts/matcher_c_capacity.sh` | POST_ONLY case separated, seeds end at the first state divergence, mean calls compared reported. |
 
-**Statement.** For a store `s` satisfying `Inv s`, with `CapOk S` (`capacity + 1 < 2^64`) as an explicit hypothesis rather than an `Inv` clause:
+**`sorry` count:** 0 in this phase's deliverables. Project: 2, unchanged, both in `lean/Bridge/ForwardSimulation.lean`, which `matcher_refines` supersedes.
 
-`Refines s req` := the program's entry for `req` runs to completion (for some fuel) and returns `codeOf (processB capacity (absBook (view s)) req).1`, with the emitted trades equal to the spec's trades under `tradeObs`, `bookView` of the final store equal to the spec's, and `Inv` holding afterwards.
+**Tests**
+- `lake build`: clean (102 jobs).
+- Lean differential (`matcher_lean_diff.sh`, 400 streams × 60 requests at capacities 2, 6 and 20): 72,000 requests, 0 mismatches.
+- C differential (capacity 1,000,000): 50 seeds × 400 calls, plus seeds 1000–1099 × 1,000 calls: traces identical, invariants hold.
+- Small-capacity C differential: as in the table above.
+- `make test-gen`: 7/7.
 
-`Inv` has these clauses:
-- `WF`;
-- `ClientInv`;
-- live orders ↔ queued;
-- live levels ↔ in a tree;
-- `count = restingCount`;
-- `levelsUsed = number of tree levels`;
-- `count ≤ capacity`.
-
-**Theorems proved (no `sorry`; axioms `propext`, `Classical.choice`, `Quot.sound`)**
-- `refines_static`: unsupported and invalid requests (including `qty > Qmax`).
-- `refines_duplicate`, `refines_capacity`.
-- `refines_cancel_unknown`, `refines_cancel_resting`, so **`refines_cancel : Refines s (.cancel id)`** for every id.
-- Supporting: the observation lemmas `bookSize_absBook`, `idOnBook_absBook`, `requestMayRest_iff`, `views_eq_of_perm` (sorted-permutation uniqueness) and `cancel_spec_view`, plus the `Inv` preservation lemmas for cancel.
-
-**Remaining in Phase 4:** the matching loop, the resting step, and the assembly into `matcher_refines` for every request. Per the review instruction, **the loop proof waits for the review of `LOOP-INVARIANT.md`**, which has two ⚑ decisions.
-
-**`sorry` count:** deliverables 0. Project: 2, unchanged (`lean/Bridge/ForwardSimulation.lean`, superseded by this phase's final theorem).
-
-**Tests:** `lake build` is clean (95 jobs). Lean regression: 0 mismatches. C differential (capacity 1,000,000): 100 seeds × 1,000 calls, traces identical. `make test-gen`: 7/7.
+**Not done in Phase 4 (for Phase 5 or later)**
+- A trace theorem over request sequences: `matcher_refines` applied step by step from `inv_init`. Relating each step to `runB` on the *spec's* book, rather than on the book decoded from the store, needs a lemma that `processB`'s observation depends only on `bookView`. That lemma is not proved.
 
 ---
 

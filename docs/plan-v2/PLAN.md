@@ -122,3 +122,9 @@ Decisions after Phase 3 (2026-09-27):
 • The Lean differential (scripts/matcher_lean_diff.sh) is a regression test through Phase 4: proof-driven refactors of Program.lean must not change its behaviour.
 • Phase 4 checkpoint: after Inv, the rejection branches and cancel, stop and report the matching-loop invariant (the relation between store and locals and the spec's intermediate matching state; one iteration refines one spec matching step) before proving it.
 • capacity + 1 < 2^64 is an explicit hypothesis or contract law, not an Inv clause.
+
+Decisions for the matching loop (2026-09-27):
+• Continuation invariant as reported (LOOP-INVARIANT.md): the spec run from σ_k equals the whole run, with the rest-of-run stated at the spec's own fuel (matchMeasure of σ_k's contra side + 1) and a fuel-stability lemma, not a count from the C iteration counters.
+• Program.lean unchanged: the level is freed after the inner loop. Two predicates: Inv between requests, and a matching-loop invariant that allows one empty level (the level the current outer iteration bound).
+• Store reads must be observationally pure (FRAGMENT.md, "Evaluation order"); a Phase 5 contract-test item.
+• Small-capacity C differential: a POST_ONLY at a full store that both engines reject is compared and the seed continues; a seed ends at its first state-diverging call; the mean number of calls compared per seed is reported.

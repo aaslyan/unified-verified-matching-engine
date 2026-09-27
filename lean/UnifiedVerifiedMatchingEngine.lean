@@ -17,3 +17,10 @@ import Matcher.Program
 import Matcher.Logic
 import Matcher.Refines
 import Matcher.Cancel
+import Matcher.SpecStep
+import Matcher.StoreStep
+import Matcher.LoopEnv
+import Matcher.Inner
+import Matcher.Outer
+import Matcher.Rest
+import Matcher.Accept

@@ -96,6 +96,17 @@ Phase 5's semantics test generates expressions with several nested reads and
 arithmetic calls, and statements whose arguments contain them, to exercise
 this.
 
+The argument assumes the reads are **observationally pure**: `ME_order_get_*`,
+`ME_level_get_*`, `ME_capacity` and `ME_order_count` must not change anything
+a later operation can observe (no move-to-front in a lookup structure, no lazy
+rebalancing, no counters the matcher reads back). The Lean semantics makes
+this true by construction: a read is a function of the store and returns no
+new store. In C it is a property of the data layer, so it is a **contract-test
+item** for Phase 5: after any sequence of reads, every operation must behave
+as it would without them (checked by interleaving random reads into the
+contract test's operation streams and comparing against a stream without
+them).
+
 ## No handle
 
 "No handle" is not a sentinel the matcher compares against. A handle value is

@@ -1,126 +1,189 @@
-# Phase 4 checkpoint: the matching-loop invariant
+# Phase 4: the matching-loop invariant, as proved
 
-Review point before any proof effort goes into the matching loop. Everything
-else in `gen_process_order` and `gen_cancel_order` is proved (STATUS-v2,
-Phase 4).
+This started as the review point before the loop proof. It now records the
+invariant that was actually proved (Lean files `lean/Matcher/SpecStep.lean`,
+`StoreStep.lean`, `LoopEnv.lean`, `Inner.lean`, `Outer.lean`, `Rest.lean`,
+`Accept.lean`). The decisions from the review are applied:
+
+1. The spec side is related through its **remaining computation**, at the
+   spec's own fuel. No small-step relation is extracted from `doMatch`.
+2. `Program.lean` is **unchanged**: the level is freed after the inner loop.
+   There are two predicates, `Inv` between requests and outer iterations, and
+   `InvM s l` inside an outer iteration.
+
+The end result is `MatcherAccept.matcher_refines`:
+
+```
+theorem matcher_refines [EngineDb S] (hcap : CapOk S) {s : S} (hI : Inv s) (req : Req) :
+    Refines s req
+```
+
+with `inv_init : Inv init`. Axioms: `propext`, `Classical.choice`,
+`Quot.sound`.
 
 ## Setting
 
-An order request `r` that passes the entry checks (`staticCode = none`, id not
-hashed, not rejected for capacity) reaches `gen_process_buy` or
-`gen_process_sell`. Write `tc` for the contra tree (asks for a buy), `to` for
-the own tree, `s₀` for the store on entry, `b := absBook (view s₀)`.
+An order request `r` that passes the entry checks reaches
+`gen_process_buy`/`gen_process_sell`. Those checks are: `staticCode = none`,
+the id is not hashed, and it is not a capacity rejection. Notation:
 
-On the spec side, `processB` runs `processWithId b o` with `o := r.toSpec`. For
-the in-scope types this is `process`'s Phase 5 (LIMIT, IOC, MARKET, and a
-post-only order that does not cross):
+- `isBuy = (r.side = 0)`.
+- The contra tree is `contraT isBuy` (asks for a buy); the own tree is `ownT isBuy`.
+- `b = absBook (view s)`.
+- `o1 = o1Of b o`, the order `process` hands to `processOrder`.
+- `own = absSide (view s) (ownT isBuy)`.
+- `tm = b.clock + 1`.
 
-```
-mr  := doMatch F o' b.bids b.asks [] (clock + 1)      -- F := computeMatchFuel b side
-b'' := dispose mr.incoming {b with bids := mr.bids, asks := mr.asks} mr.trades
-      -- then processCascade: stops are empty, so only lastTradePrice changes
-```
+**Spec side** (`SpecStep.lean`). The accepted-order pipeline is reduced to
+`doMatch`, then `dispose`, through `bookView`:
 
-A crossing post-only order never reaches here (`rejectedPostOnly`, proved). A
-non-crossing one goes through `process`'s Phase 2, `insertOrder`; the matcher
-reaches the same book through a loop that makes zero matching steps (below).
+- `processWithId_match` handles a non-post-only order.
+- `processWithId_postOnly` handles a non-crossing post-only order. Its matching run is empty, and `insertOrder` is what `dispose` does with an empty run.
+- `processCascade_nostops` shows the cascade only sets `lastTradePrice` on a stop-free book.
 
-## The spec's intermediate state
+A crossing post-only order uses the existing `postOnly_reject_agrees`.
 
-`doMatch` is a state machine on `σ = (inc, bids, asks, trades)`. The spec run
-is identified with its remaining computation:
+## The remaining computation, at the spec's own fuel
 
 ```
-Spec(σ, f)  :=  doMatch F o' b.bids b.asks [] tm = doMatch f σ.inc σ.bids σ.asks σ.trades tm
-                ∧  f > matchMeasure σ.contra σ.inc
+dm f inc own contra trades tm := doMatch f inc (bidsOf inc.side own contra) (asksOf …) trades tm
+rest inc own contra trades tm := dm (matchMeasure contra inc + 1) inc own contra trades tm
 ```
 
-`Spec(σ₀, F)` holds at the start (`computeMatchFuel_gt_matchMeasure`). Each
-non-terminal `doMatch` step moves to `Spec(σ', f − 1)` (the step decreases the
-measure: the existing progress lemmas). When `σ` is terminal,
-`doMatch f σ = σ`, so the spec's `mr` is `σ`.
+The fuel of `rest` is the spec's own bound for the state: `computeMatchFuel`
+of the state's book is `matchMeasure + 1`. No count taken from the C iteration
+counters is involved. Four lemmas carry it:
 
-## The coupling: store and locals against `σ`
+- **`doMatch_fuel_stable`** (new; the repository had no monotonicity lemma for
+  `doMatch`). Any fuel above `matchMeasure` of the contra side gives the same
+  result. It is proved by functional induction over all `doMatch` branches,
+  including the ones the matcher never reaches: empty level, zero visible, and
+  iceberg reload.
+- **`rest_start`**: `mrOf b o = rest o1 own contra0 [] tm`, from
+  `computeMatchFuel_gt_matchMeasure` and stability.
+- **`rest_step`**: if `∀ n, dm (n+1) σ = dm n σ'` and `matchMeasure σ' < matchMeasure σ`,
+  then `rest σ = rest σ'`.
+- **`rest_step_done`**: the same step into a terminal state.
 
-Between statements of the loops, with `s` the store and `rem`, `stop`, `best`,
-`passive` the locals:
+## Store and locals against the spec state
 
-| | Clause |
+The locals are the record `Loc` (`sEnv r L` is the side function's
+environment). The spec state is `(inc, contra, strades)`.
+
+**Outer boundaries** (`OInv`, `Outer.lean`):
+
+| Clause | Content |
 |---|---|
-| C1 | **Contra side.** `(absSide (view s) tc)` with empty levels dropped equals `σ.contra` through `levelView`. |
-| C2 | **Own side** is untouched: `absSide (view s) to = absSide (view s₀) to`; `doMatch` never touches it (`doMatch_bids_of_buy` / `…asks_of_sell`). |
-| C3 | **Aggressor.** If `σ.inc.status = cancelled` then `rem = 0`; otherwise `rem.toNat = σ.inc.remainingQty`. The request's other fields are unchanged in the environment. |
-| C4 | **Trades.** The trade buffer is `σ.trades.map tradeObs`. |
-| C5 | **Store invariant.** Every `Inv` clause holds, except that `ClientInv.level_nonempty` may fail for the single level `best`, and only inside an outer iteration. |
+| `inv` | `Inv s` (no empty level) |
+| `own` | `absSide (view s) (ownT isBuy) = own` (exact) |
+| `spec` | `mr = rest inc own contra strades tm` |
+| `cview` | `(absSide (view s) (contraT isBuy)).map levelView = contra.map levelView` |
+| `aggr` | `rem.toNat = if inc.status = cancelled then 0 else inc.remainingQty` |
+| `shape` | `inc = { o1 with remainingQty, status }` (`IncShape`) |
+| `trades` | the trade buffer is `strades.map tradeObs` |
+| `tbound` | `trades.length + count s ≤ C0 + [rem = 0]` (the trade buffer never overflows) |
+| `cnt`, `hashid`, `remle` | `count s ≤ C0`; no hashed order has the request's id; `rem ≤ qty` |
+| `stopT` | `stop → mr = term inc own contra strades tm` |
+| `stopX` | `stop → type ≠ MARKET → no contra level crosses the request price` (used for `uncrossed` after resting) |
 
-Inside the inner loop, additionally:
+**Inside an outer iteration on level `l`** (`IInv`, `Inner.lean`). Level `l`
+was the best contra level at the iteration's start, where the store view was
+`dbR`. The spec split its contra side as `level :: RL`.
 
-| | Clause |
+| Clause | Content |
 |---|---|
-| I1 | `best` is the best level of `tc` in `view s`. Its price crosses `r.price`, or the order is MARKET. Its orders with the queue head first are `σ.contra`'s head level, unless its queue is empty. |
-| I2 | `passive = qFirst best`: null exactly when `best`'s queue is empty. |
+| `sinv.inv` | `InvM s l`: `Inv`, except level `l` may be empty |
+| `sinv.frame` | `Frame l dbR (view s)`: only level `l`'s queue, the rows queued there, the hash and the live-order list changed |
+| `sinv.empty` | `queue l = [] → contra = RL` |
+| `sinv.head` | `queue l ≠ [] → contra = level' :: RL` with `levelView level' = levelView (absLevel (view s) t l)` |
+| `passive` | `rem ≠ 0 → passive = (queue l).head?` |
+| others | as in `OInv`: `spec`, `aggr`, `shape`, `trades`, `tbound`, `cnt`, `hashid`, `remle`, `best = some l`, `stop = false` |
 
-## One iteration refines one spec step
+`RL.map levelView = (restSide dbR t l).map levelView` is fixed for the
+iteration. `restSide` is the side without `l`, and `absSide_best` splits a
+side into its best level and `restSide`. `Frame` keeps `restSide` and the own
+side unchanged.
 
-**Inner iteration** (`passive ≠ null ∧ rem > 0`) = **exactly one `doMatch` step**,
-taken at `σ.contra`'s head level on its head order `resting`:
+**The cancelled flag.** No result code distinguishes a fully filled incoming
+order from one cancelled by STP. Every accepted order returns `accepted`, and
+`dispose` treats `remainingQty = 0` and `status = cancelled` alike. So the
+flag is folded into `rem = 0` through `aggr`, as the review allowed. No clause
+carries the flag separately.
 
-| Matcher branch | `doMatch` branch |
-|---|---|
-| `account ≠ 0 ∧ account = passive.account ∧ stp ≠ NONE` | `selfTradeConflict inc resting` (group = nonzero account, policy = mode ≠ NONE) |
-| · CANCEL_NEW: `rem := 0` | `cancelNewest`: `inc` cancelled, terminal |
-| · CANCEL_OLD: remove `passive`, `passive := next` | `cancelOldest`: drop `resting`, recurse |
-| · CANCEL_BOTH: remove `passive`, `rem := 0` | `cancelBoth`: drop `resting`, `inc` cancelled, terminal |
-| · DECREMENT: `fill := min(rem, prem)`, both reduced, remove `passive` if it reaches 0 | `decrement`: `reduceQty = min(inc.rem, resting.visible)`, with visible = remaining (no icebergs), `> 0` |
-| otherwise: fill, `emit`, remove `passive` if it reaches 0 | normal fill: trade appended; full fill removes, partial fill updates the head |
+## (a) One inner iteration is one `doMatch` step
 
-`doMatch` branches that cannot occur under the coupling:
-- an empty head level: `σ.contra` never has one, because `doMatch` drops a level in the same step that empties it;
-- a zero-visible order: `visibleQty = remaining > 0` by `ClientInv`;
+`inner_body` rests on `head_facts`: under `IInv` with `rem ≠ 0` and
+`queue l = h :: qs`, the spec's head order `resting` has the view of `h`'s row.
+From that follow `AtHead`, the row facts and the self-trade test
+(`conflict_iff`). Each matcher branch then maps to exactly one `doMatch`
+unfolding (`SpecStep.lean`):
+
+| Matcher branch | Spec step | Lemma |
+|---|---|---|
+| STP, `CANCEL_NEW`: `rem := 0` | `cancelNewest` (terminal) | `inner_cancelNew` / `step_cancelNew` |
+| STP, `CANCEL_OLD`: unlink `passive`, `passive := next` | `cancelOldest` | `inner_cancelOld` / `step_cancelOld` |
+| STP, `CANCEL_BOTH`: unlink, `rem := 0` | `cancelBoth` (terminal) | `inner_cancelOld` / `step_cancelBoth` |
+| STP, `DECREMENT`, resting used up | `decrement`, `restRem = 0` | `inner_dec` / `step_decrement_full` |
+| STP, `DECREMENT`, resting keeps some | `decrement`, head updated | `inner_dec` / `step_decrement_part` |
+| no conflict, full fill | fill, head removed | `inner_fill` / `step_fill_full` |
+| no conflict, partial fill | fill, head updated | `inner_fill` / `step_fill_part` |
+
+No branch failed to map, so there is no ⚑.
+
+Three `doMatch` branches are unreachable under the invariant:
+
+- an empty head level: `sinv.empty` drops it;
+- a zero-visible head: `order_ok` gives `remaining > 0`, and visible = remaining;
 - an iceberg reload: `displayQty = none`.
 
-**Outer iteration** (`rem > 0 ∧ ¬stop`) = **the inner loop's steps, then zero spec steps**:
+## (b) The inner loop
 
-- `best := tBest tc`. Null means `σ.contra = []`: the spec's `| [] =>` terminal. `stop := true`.
-- The price does not cross and the order is not MARKET: the spec's `!canMatchPrice` terminal. `stop := true`.
-- Otherwise the inner loop runs. It exits when `rem = 0` (spec terminal: filled or cancelled) or when `passive = null`. In the second case the level is exhausted; the spec dropped it in the step that removed its last order.
-- If `best`'s count is 0: `tRemove` and `levelFree`. Zero spec steps; this restores `level_nonempty` (C5).
+`inner_loop` proves the loop by induction on the measure
+`|queue l| + [rem ≠ 0]`. Every iteration either removes the head order or sets
+`rem := 0`.
 
-**Exit.** When the outer loop exits, `σ` is terminal, so `mr = σ`.
+- **Bound.** The measure is at most `count + 1 ≤ capacity + 1`, so the loop never runs into its bound.
+- **Exit.** On exit, `rem = 0 ∨ queue l = []`.
+- **Trade buffer.** Before each emit, `trades.length < count ≤ capacity`, from `tbound`.
 
-## Termination and bounds (loop budget `capacity + 1`)
+## (c) One outer iteration
 
-- **Inner:** every inner iteration that continues removes one resting order, so there are at most `count(s) + 1 ≤ capacity + 1` iterations.
-- **Outer:** every outer iteration that continues ends with `passive = null`, so it frees a level. That gives at most `levels + 1 ≤ count + 1 ≤ capacity + 1` iterations, using levels ≤ orders from no empty level (`Inv.levels_eq`).
-- **Trade buffer:** trades ≤ removed resting orders + 1 ≤ `capacity + 1`.
-- **Overflow:** `fill ≤ rem` and `fill ≤ prem`, so every subtraction stays at or above 0. No sums are formed. The `Qmax` bound is not needed for the matcher's own arithmetic.
+`outer_body` covers the three ways an outer iteration can go:
 
-## After the loop: resting ↔ `dispose`
+- **No best level.** `tBest = none` means the tree is empty, so `contra = []`. It sets `stop`, and `rest_empty` gives `stopT`.
+- **Best level does not cross.** It sets `stop`. `rest_noprice` gives `stopT`; `stopX` holds by `better`.
+- **Best level crosses.** `qFirst`, then `inner_loop`, then one of:
+  - `queue l = []`: `tRemove` and `levelFree` (`ev_free`). `Inv` comes back from `free_clientInv`, and the decoded contra side is `restSide` (`free_absSide`), which is the spec's `RL`.
+  - `queue l ≠ []`, which forces `rem = 0`: no free. `Inv` comes from `InvM.toInv`, and `absSide_best` gives `level' :: RL`.
 
-`rem > 0 ∧ otype ∉ {IOC, MARKET}` ⇔ `dispose` inserts. That is, not filled or cancelled, `tif ≠ ioc`, and `orderType ≠ market`.
+The measure `|contra tree| + [rem ≠ 0 ∧ ¬stop]` decreases in every case.
 
-- `orderAlloc` cannot fail: a resting request passed the capacity check (`count < capacity`), and matching only lowered `count`.
-- `levelAlloc` cannot fail: levels ≤ orders < capacity.
-- `hashInsert` cannot refuse: the id was not hashed at entry, and matching removed only other ids.
+## (d) The outer loop
 
-So the three failure branches are unreachable under `Inv`. The book step is `tFind` → existing level, or `levelAlloc`/`setL price`/`tInsert`, then `qInsertTail`. It matches `insertOrder` (append to the level at the price, or a new level in sorted position). The view equality uses the same sorted-permutation argument as cancel (`views_eq_of_perm`); the row matches by `restingOrder_matches_request`.
+`outer_loop` proves the loop by induction on that measure, which is at most
+`levels + 1 ≤ count + 1 ≤ capacity + 1` (`levels_le_count`). On exit:
 
-## Lemmas the loop proof needs
+- `rem = 0` gives `mr = term …` by `rest_done`;
+- `stop` gives `mr = term …` by `stopT`.
 
-1. `doMatch` one-step equations for each branch above, under the coupling hypotheses.
-2. Store-side effects:
-   - `absSide` after writing `remaining` (partial fill);
-   - after removing the head order: `qRemove` + `hashRemove` + `orderFree`, reusing the cancel lemmas without the level removal;
-   - after `tRemove` + `levelFree` of an empty level.
-3. C1 with "empty levels dropped", and C5, the weakened invariant.
-4. The measure and bound lemmas; building `LoopRun` for both loops by induction on the measure.
-5. Resting: `insertOrder` against the store insert.
-6. Assembly:
-   - `matcher_refines` for accepted orders;
-   - then `matcher_refines` for every request (cases: `refines_static`, `refines_duplicate`, `refines_capacity`, accepted, `refines_cancel`);
-   - then the trace corollary from `init_empty`.
+So `mr.incoming = inc`, `mr.trades = strades`, `mr`'s own side is `own`, and
+`mr`'s contra side is `contra` through `levelView`.
 
-## ⚑ Decisions for the reviewer
+## (e) Resting, the result code, the main theorem
 
-1. **Granularity of the spec side.** The coupling ties the matcher to `doMatch` through "the remaining computation is equal" (`Spec(σ, f)`). The alternative is a small-step relation extracted from `doMatch`. The first reuses the existing fuel and progress lemmas unchanged, so I recommend it.
-2. **The transient empty level.** The matcher, like the handwritten C, frees an emptied level after the inner loop, so for a moment the store holds an empty level in a tree. The coupling tolerates this with C1 (empty levels dropped) and C5 (one exception). The alternative is changing `Program.lean` to free the level inside the inner loop, the moment its last order leaves. Then `ClientInv` holds at every statement, which removes C5's exception and the dropped-empty-levels clause. Observable behaviour is identical, and the Lean and C differentials would re-check it. It costs a departure from the handwritten C's structure. I recommend **changing the program**: it removes the one non-standard clause from the invariant.
+- **`rest_run`.** It covers `orderAlloc` and the seven field writes (`rest_prefix`), then `tFind` and either an existing level or `levelAlloc`/`setL`/`tInsert` (`ev_newLevel`), then `qInsertTail` and `hashInsert`. `hashInsert` accepts because of `hashid`. The capacity failure branches are unreachable:
+  - `count < capacity` from the entry check;
+  - `levelsUsed ≤ count < capacity`.
+- **`rest_book`.** Through `levelView`, the own side is `insertDesc`/`insertAsc` of the old side:
+  - new price: `insSpec_fresh` against `insLevel`;
+  - existing price: `insSpec_exists` against `appAt`;
+  - `sortLevels_map` carries both through the sort.
+  The contra side is unchanged.
+- **`rest_inv`.** `Inv` holds again (`join_clientInv`). The new level is uncrossed by `stopX`.
+- **Assembly.** `side_cont` and `side_run` assemble the side function, including the post-only check (`wouldCross_iff`). `refines_accept` adds the entry dispatch, and `matcher_refines` adds the case split over all requests.
+
+## Deviations from the checkpoint report
+
+- **C1, the dropped empty level.** It is not "empty levels filtered from the decoded side". The empty level is handled structurally instead: inside an outer iteration the decoded side is split as level `l` plus `restSide`, and `sinv.empty` says the spec has dropped `l`. No filtered view appears in any statement.
+- **Own side.** The own-side clause is exact equality (`absSide … = own`), not view equality. The resting step needs the spec's own list exactly, to run `insertDesc` on it.
+- **`stopX`.** It was added. Without it, `uncrossed` for a newly created own level has no premise.
