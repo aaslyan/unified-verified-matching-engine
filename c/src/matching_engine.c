@@ -18,7 +18,9 @@ static inline uint64_t min_u64(uint64_t a, uint64_t b) {
 
 bool MatchingEngine_ProcessOrder(MatchingEngine *engine, const OrderRequest *req) {
     if (!req || req->qty == 0) return false;
-    if (req->order_type == TYPE_LIMIT && req->price == 0) return false;
+    if (req->side > SIDE_SELL || req->order_type > TYPE_POST_ONLY ||
+        req->stp_mode > STP_DECREMENT_AND_CONTINUE) return false;
+    if (req->order_type != TYPE_MARKET && req->price == 0) return false;
 
     // Reject duplicate order IDs upfront before modifying any book state
     if (EngineDb_ind_order_Find(req->id) != NULL) {
@@ -52,7 +54,6 @@ bool MatchingEngine_ProcessOrder(MatchingEngine *engine, const OrderRequest *req
                     } else if (req->stp_mode == STP_CANCEL_OLD || req->stp_mode == STP_CANCEL_BOTH) {
                         struct Order *to_cancel = passive;
                         passive = PriceLevel_orders_Next(passive);
-                        best_ask->total_qty -= to_cancel->remaining_qty;
                         PriceLevel_orders_Remove(best_ask, to_cancel);
                         EngineDb_ind_order_Remove(to_cancel);
                         EngineDb_order_pool_Free(to_cancel);
@@ -174,7 +175,6 @@ bool MatchingEngine_ProcessOrder(MatchingEngine *engine, const OrderRequest *req
                     } else if (req->stp_mode == STP_CANCEL_OLD || req->stp_mode == STP_CANCEL_BOTH) {
                         struct Order *to_cancel = passive;
                         passive = PriceLevel_orders_Next(passive);
-                        best_bid->total_qty -= to_cancel->remaining_qty;
                         PriceLevel_orders_Remove(best_bid, to_cancel);
                         EngineDb_ind_order_Remove(to_cancel);
                         EngineDb_order_pool_Free(to_cancel);
@@ -282,12 +282,13 @@ bool MatchingEngine_CancelOrder(MatchingEngine *engine, uint64_t order_id) {
     if (!ord || !ord->p_price_level) return false;
 
     struct PriceLevel *lvl = ord->p_price_level;
+    uint8_t side = ord->side; // Snapshot fields needed after free (ord is invalid past this point)
     PriceLevel_orders_Remove(lvl, ord);
     EngineDb_ind_order_Remove(ord);
     EngineDb_order_pool_Free(ord);
 
     if (lvl->orders_n == 0) {
-        if (ord->side == SIDE_BUY) {
+        if (side == SIDE_BUY) {
             EngineDb_bids_Remove(lvl);
         } else {
             EngineDb_asks_Remove(lvl);

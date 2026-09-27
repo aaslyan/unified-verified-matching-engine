@@ -126,6 +126,121 @@ static void test_post_only_and_uncrossed(void) {
     printf("  -> PASSED\n");
 }
 
+static void test_cancel_last_bid_order_removes_level(void) {
+    printf("[TEST] Running cancel-last-bid-order level removal test...\n");
+    MatchingEngine engine;
+    MatchingEngine_Init(&engine, dummy_trade_cb, NULL);
+
+    // Top-of-book bid level with a single order.
+    OrderRequest b1 = { .id = 201, .side = SIDE_BUY, .order_type = TYPE_LIMIT, .price = 100, .qty = 10 };
+    assert(MatchingEngine_ProcessOrder(&engine, &b1));
+    // Lower-priority bid level, must survive the cancel of the top level.
+    OrderRequest b2 = { .id = 202, .side = SIDE_BUY, .order_type = TYPE_LIMIT, .price = 90, .qty = 5 };
+    assert(MatchingEngine_ProcessOrder(&engine, &b2));
+    // An unrelated resting ask, to ensure the ask tree is left untouched.
+    OrderRequest a1 = { .id = 300, .side = SIDE_SELL, .order_type = TYPE_LIMIT, .price = 150, .qty = 20 };
+    assert(MatchingEngine_ProcessOrder(&engine, &a1));
+
+    assert(MatchingEngine_CheckInvariants(&engine));
+    struct PriceLevel *best_bid = EngineDb_bids_Best();
+    assert(best_bid != NULL && best_bid->price == 100);
+
+    // Cancel the sole order resting at the top bid level -> level must be removed from the bids tree.
+    assert(MatchingEngine_CancelOrder(&engine, 201));
+    assert(MatchingEngine_CheckInvariants(&engine));
+    assert(EngineDb_ind_order_Find(201) == NULL);
+
+    best_bid = EngineDb_bids_Best();
+    assert(best_bid != NULL && best_bid->price == 90); // Fallback to remaining bid level
+
+    struct PriceLevel *best_ask = EngineDb_asks_Best();
+    assert(best_ask != NULL && best_ask->price == 150); // Ask tree untouched
+
+    EngineDb_Destroy();
+    printf("  -> PASSED\n");
+}
+
+static void test_cancel_last_ask_order_removes_level(void) {
+    printf("[TEST] Running cancel-last-ask-order level removal test...\n");
+    MatchingEngine engine;
+    MatchingEngine_Init(&engine, dummy_trade_cb, NULL);
+
+    // Top-of-book ask level with a single order.
+    OrderRequest a1 = { .id = 401, .side = SIDE_SELL, .order_type = TYPE_LIMIT, .price = 200, .qty = 10 };
+    assert(MatchingEngine_ProcessOrder(&engine, &a1));
+    // Higher-priority (worse) ask level, must survive the cancel of the top level.
+    OrderRequest a2 = { .id = 402, .side = SIDE_SELL, .order_type = TYPE_LIMIT, .price = 210, .qty = 5 };
+    assert(MatchingEngine_ProcessOrder(&engine, &a2));
+    // An unrelated resting bid, to ensure the bid tree is left untouched.
+    OrderRequest b1 = { .id = 500, .side = SIDE_BUY, .order_type = TYPE_LIMIT, .price = 150, .qty = 20 };
+    assert(MatchingEngine_ProcessOrder(&engine, &b1));
+
+    assert(MatchingEngine_CheckInvariants(&engine));
+    struct PriceLevel *best_ask = EngineDb_asks_Best();
+    assert(best_ask != NULL && best_ask->price == 200);
+
+    // Cancel the sole order resting at the top ask level -> level must be removed from the asks tree.
+    assert(MatchingEngine_CancelOrder(&engine, 401));
+    assert(MatchingEngine_CheckInvariants(&engine));
+    assert(EngineDb_ind_order_Find(401) == NULL);
+
+    best_ask = EngineDb_asks_Best();
+    assert(best_ask != NULL && best_ask->price == 210); // Fallback to remaining ask level
+
+    struct PriceLevel *best_bid = EngineDb_bids_Best();
+    assert(best_bid != NULL && best_bid->price == 150); // Bid tree untouched
+
+    EngineDb_Destroy();
+    printf("  -> PASSED\n");
+}
+
+static void test_stp_cancel_old_keeps_level_total(void) {
+    printf("[TEST] Running STP cancel-old level total_qty test...\n");
+    MatchingEngine engine;
+    MatchingEngine_Init(&engine, dummy_trade_cb, NULL);
+
+    OrderRequest a = { .id = 1, .account_id = 7, .side = SIDE_SELL, .order_type = TYPE_LIMIT, .price = 100, .qty = 5 };
+    OrderRequest b = { .id = 2, .account_id = 8, .side = SIDE_SELL, .order_type = TYPE_LIMIT, .price = 100, .qty = 5 };
+    OrderRequest c = { .id = 3, .account_id = 7, .side = SIDE_BUY, .order_type = TYPE_LIMIT,
+                       .stp_mode = STP_CANCEL_OLD, .price = 100, .qty = 1 };
+    assert(MatchingEngine_ProcessOrder(&engine, &a) == true);
+    assert(MatchingEngine_ProcessOrder(&engine, &b) == true);
+    assert(MatchingEngine_ProcessOrder(&engine, &c) == true);
+
+    // Order 1 is cancelled by STP, order 2 fills 1 unit: 4 remain at the level.
+    struct PriceLevel *lvl = EngineDb_asks_Best();
+    assert(lvl != NULL && lvl->total_qty == 4);
+    assert(MatchingEngine_CheckInvariants(&engine) == true);
+    printf("  -> PASSED\n");
+}
+
+static void test_invalid_requests_rejected(void) {
+    printf("[TEST] Running invalid request rejection test...\n");
+    MatchingEngine engine;
+    MatchingEngine_Init(&engine, dummy_trade_cb, NULL);
+
+    OrderRequest ioc0 = { .id = 1, .side = SIDE_BUY, .order_type = TYPE_IOC, .price = 0, .qty = 5 };
+    OrderRequest po0 = { .id = 2, .side = SIDE_SELL, .order_type = TYPE_POST_ONLY, .price = 0, .qty = 5 };
+    OrderRequest bad_side = { .id = 3, .side = 2, .order_type = TYPE_LIMIT, .price = 100, .qty = 5 };
+    OrderRequest bad_type = { .id = 4, .side = SIDE_BUY, .order_type = 4, .price = 100, .qty = 5 };
+    OrderRequest bad_stp = { .id = 5, .side = SIDE_BUY, .order_type = TYPE_LIMIT, .stp_mode = 5, .price = 100, .qty = 5 };
+    assert(MatchingEngine_ProcessOrder(&engine, &ioc0) == false);
+    assert(MatchingEngine_ProcessOrder(&engine, &po0) == false);
+    assert(MatchingEngine_ProcessOrder(&engine, &bad_side) == false);
+    assert(MatchingEngine_ProcessOrder(&engine, &bad_type) == false);
+    assert(MatchingEngine_ProcessOrder(&engine, &bad_stp) == false);
+    assert(EngineDb_bids_Best() == NULL && EngineDb_asks_Best() == NULL);
+
+    // A market order still needs no price.
+    OrderRequest ask = { .id = 6, .side = SIDE_SELL, .order_type = TYPE_LIMIT, .price = 100, .qty = 5 };
+    OrderRequest mkt = { .id = 7, .side = SIDE_BUY, .order_type = TYPE_MARKET, .price = 0, .qty = 2 };
+    assert(MatchingEngine_ProcessOrder(&engine, &ask) == true);
+    assert(MatchingEngine_ProcessOrder(&engine, &mkt) == true);
+    assert(EngineDb_asks_Best()->total_qty == 3);
+    assert(MatchingEngine_CheckInvariants(&engine) == true);
+    printf("  -> PASSED\n");
+}
+
 int main(void) {
     printf("===================================================================\n");
     printf("   RUNNING MATCHING ENGINE CORRECTNESS & INVARIANT TEST SUITE     \n");
@@ -134,6 +249,10 @@ int main(void) {
     test_duplicate_order_id_rejection();
     test_matching_and_fifo();
     test_post_only_and_uncrossed();
+    test_cancel_last_bid_order_removes_level();
+    test_cancel_last_ask_order_removes_level();
+    test_stp_cancel_old_keeps_level_total();
+    test_invalid_requests_rejected();
 
     printf("\n===================================================================\n");
     printf("   ALL CORRECTNESS AND INVARIANT TESTS PASSED (100%% OK)           \n");
