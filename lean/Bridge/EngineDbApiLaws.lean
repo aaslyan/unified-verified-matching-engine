@@ -198,18 +198,6 @@ private theorem levelLive_upd_other (db : Db) {l x : LevelH} (r : Option LevelRo
     Db.levelLive { db with levels := upd db.levels l r } x = db.levelLive x := by
   simp [Db.levelLive, upd_other _ _ hx]
 
-theorem mapTotal_isSome (db : Db) (l x : LevelH) (f : UInt64 → UInt64) :
-    (db.mapTotal l f x).isSome = (db.levels x).isSome := by
-  by_cases he : x = l
-  · subst he; cases hl : db.levels x <;> simp [Db.mapTotal, hl]
-  · simp [Db.mapTotal, upd_other _ _ he]
-
-theorem mapTotal_priceOf (db : Db) (l x : LevelH) (f : UInt64 → UInt64) :
-    (db.mapTotal l f x).map LevelRow.price = (db.levels x).map LevelRow.price := by
-  by_cases he : x = l
-  · subst he; cases hl : db.levels x <;> simp [Db.mapTotal, hl]
-  · simp [Db.mapTotal, upd_other _ _ he]
-
 theorem orderAlloc_preserves_WF {r : Option OrderH}
     (hw : db.WF) (hpost : orderAlloc.post db r db') : db'.WF := by
   cases r with
@@ -406,7 +394,6 @@ theorem qInsertTail_preserves_WF {l : LevelH} {h : OrderH}
     queue_live := ?_, queue_nodup := ?_, queue_unique := ?_, tree_live := ?_, tree_prices := ?_,
     levels_live := ?_ }
   · intro l' x hx
-    simp only [Db.levelLive, mapTotal_isSome]
     rcases hmem l' x hx with hx | ⟨rfl, rfl⟩
     · exact hw.queue_live l' x hx
     · exact ⟨hh, hl⟩
@@ -426,11 +413,10 @@ theorem qInsertTail_preserves_WF {l : LevelH} {h : OrderH}
     · subst x₂; exact absurd ⟨l₁, m₁⟩ hnq
     · subst x₁; exact absurd ⟨l₂, m₂⟩ hnq
     · rw [e₁, e₂]
-  · intro t x hx; simp only [Db.levelLive, mapTotal_isSome]; exact hw.tree_live t x hx
+  · intro t x hx; exact hw.tree_live t x hx
   · intro t x₁ h₁ x₂ h₂ he
-    simp only [Db.levelPrice, mapTotal_priceOf] at he
     exact hw.tree_prices t _ h₁ _ h₂ he
-  · intro x; simp only [Db.levelLive, mapTotal_isSome]; exact hw.levels_live x
+  · intro x; exact hw.levels_live x
 
 theorem qRemove_preserves_WF {l : LevelH} {h : OrderH}
     (hw : db.WF) (hpost : qRemove.post db l h db') : db'.WF := by
@@ -443,18 +429,17 @@ theorem qRemove_preserves_WF {l : LevelH} {h : OrderH}
   refine { hw with
     queue_live := ?_, queue_nodup := ?_, queue_unique := ?_, tree_live := ?_, tree_prices := ?_,
     levels_live := ?_ }
-  · intro l' x hx; simp only [Db.levelLive, mapTotal_isSome]; exact hw.queue_live l' x (hsub l' x hx)
+  · intro l' x hx; exact hw.queue_live l' x (hsub l' x hx)
   · intro l'
     by_cases he : l' = l
     · subst he; simp only [upd_same]; exact (hw.queue_nodup l').erase h
     · simp only [upd_other _ _ he]; exact hw.queue_nodup l'
   · intro l₁ l₂ x h₁ h₂
     exact hw.queue_unique _ _ _ (hsub _ _ h₁) (hsub _ _ h₂)
-  · intro t x hx; simp only [Db.levelLive, mapTotal_isSome]; exact hw.tree_live t x hx
+  · intro t x hx; exact hw.tree_live t x hx
   · intro t x₁ h₁ x₂ h₂ he
-    simp only [Db.levelPrice, mapTotal_priceOf] at he
     exact hw.tree_prices t _ h₁ _ h₂ he
-  · intro x; simp only [Db.levelLive, mapTotal_isSome]; exact hw.levels_live x
+  · intro x; exact hw.levels_live x
 
 theorem tInsert_preserves_WF {t : Tree} {l : LevelH}
     (hw : db.WF) (hpre : tInsert.pre db t l) (hpost : tInsert.post db t l db') : db'.WF := by
@@ -625,12 +610,12 @@ theorem hashRemove_valid {h : OrderH} (hpost : hashRemove.post db h db') :
 theorem qInsertTail_valid {l : LevelH} {h : OrderH} (hpost : qInsertTail.post db l h db') :
     (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
   subst hpost
-  exact ⟨fun _ => Iff.rfl, fun x => by simp only [Db.levelLive, mapTotal_isSome]⟩
+  exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
 
 theorem qRemove_valid {l : LevelH} {h : OrderH} (hpost : qRemove.post db l h db') :
     (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
   subst hpost
-  exact ⟨fun _ => Iff.rfl, fun x => by simp only [Db.levelLive, mapTotal_isSome]⟩
+  exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
 
 theorem tInsert_valid {t : Tree} {l : LevelH} (hpost : tInsert.post db t l db') :
     (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by

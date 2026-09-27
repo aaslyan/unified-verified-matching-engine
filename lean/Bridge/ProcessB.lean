@@ -20,10 +20,10 @@ Checks, in order, each leaving the book unchanged and emitting no trade:
 4. **Capacity.** The request may rest (LIMIT or POST_ONLY) and the book is
    full. Pessimistic by design: an order that would have filled completely
    is also rejected.
-5. **Post-only would cross.** The same test `process` applies.
-
 Otherwise the order runs through `processWithId` (`process` with the
-caller's id). A cancel runs through `cancelOrder`.
+caller's id); a crossing post-only order is rejected by `process` itself, and
+`postOnlyCode` reports it (`postOnly_reject_agrees`). A cancel runs through
+`cancelOrder`.
 
 The transfer lemmas: every rejection returns the input book, so it keeps
 every invariant trivially; an accepted order uses the existing reachable-state
@@ -83,6 +83,14 @@ def requestMayRest (r : CRequest) : Bool :=
 def rejectWith (c : ResultCode) (b : BookState) : ResultCode × ProcessResult :=
   (c, { book := b, trades := [] })
 
+/-- The result code of an order `process` handles. `process` itself rejects a
+    post-only order that would cross (its Phase 2); this reports that outcome
+    with the same test. The book always comes from `process`, and
+    `postOnly_reject_agrees` proves the reported rejection is what `process`
+    did. -/
+def postOnlyCode (o : Order) (b : BookState) : ResultCode :=
+  if o.postOnly && wouldCross o b then .rejectedPostOnly else .accepted
+
 /-- The spec step of the generated matcher. -/
 def processB (cap : Nat) (b : BookState) : Req → ResultCode × ProcessResult
   | .order r =>
@@ -95,8 +103,7 @@ def processB (cap : Nat) (b : BookState) : Req → ResultCode × ProcessResult
         if qmax cap < r.qty.toNat then rejectWith .rejectedInvalid b
         else if idOnBook b o.id then rejectWith .rejectedDuplicate b
         else if requestMayRest r && cap ≤ bookSize b then rejectWith .rejectedCapacity b
-        else if o.postOnly && wouldCross o b then rejectWith .rejectedPostOnly b
-        else (.accepted, processWithId b o)
+        else (postOnlyCode o b, processWithId b o)
   | .cancel id =>
     match cancelOrder b id.toNat with
     | none => rejectWith .rejectedUnknownId b
@@ -295,29 +302,126 @@ theorem cancelOrder_preserves_ProcessInv {b b' : BookState} {oid : OrderId}
 -- Transfer lemmas
 -- ============================================================================
 
-/-- A step either accepts an order, cancels one, or rejects with the input
-    book unchanged and no trade. -/
+/-- A step either runs `process` on an order (accepted, or rejected by
+    `process` as a crossing post-only), cancels one, or rejects at entry with
+    the input book unchanged and no trade. -/
 theorem processB_cases (cap : Nat) (b : BookState) (req : Req) :
     (processB cap b req).2 = { book := b, trades := [] } ∨
-    (processB cap b req).1 = .accepted ∨ (processB cap b req).1 = .cancelled := by
+    (∃ o, (processB cap b req).2 = processWithId b o ∧
+      (processB cap b req).1 = postOnlyCode o b) ∨
+    (processB cap b req).1 = .cancelled := by
   unfold processB
   cases req with
   | order r =>
     simp only
-    repeat' split
-    all_goals simp [rejectWith]
+    split
+    · exact Or.inl rfl
+    · split
+      · exact Or.inl rfl
+      · rename_i o _
+        split
+        · exact Or.inl rfl
+        · split
+          · exact Or.inl rfl
+          · split
+            · exact Or.inl rfl
+            · exact Or.inr (Or.inl ⟨o, rfl, rfl⟩)
   | cancel id =>
     simp only
-    split <;> simp [rejectWith]
+    split
+    · exact Or.inl rfl
+    · exact Or.inr (Or.inr rfl)
 
-/-- Every rejection returns the input book and no trade. -/
+/-- Every entry rejection returns the input book and no trade. -/
 theorem processB_rejected {cap : Nat} {b : BookState} {req : Req}
-    (h : (processB cap b req).1 ≠ .accepted ∧ (processB cap b req).1 ≠ .cancelled) :
+    (h : (processB cap b req).1 ≠ .accepted ∧ (processB cap b req).1 ≠ .rejectedPostOnly ∧
+      (processB cap b req).1 ≠ .cancelled) :
     (processB cap b req).2 = { book := b, trades := [] } := by
-  rcases processB_cases cap b req with h' | h' | h'
+  rcases processB_cases cap b req with h' | ⟨o, -, hc⟩ | h'
   · exact h'
-  · exact absurd h' h.1
-  · exact absurd h' h.2
+  · unfold postOnlyCode at hc
+    split at hc
+    · exact absurd hc h.2.1
+    · exact absurd hc h.1
+  · exact absurd h' h.2.2
+
+/-- **One place for post-only.** When `postOnlyCode` reports a rejection,
+    `process` did reject: no trade, and bids, asks and stops unchanged. -/
+theorem postOnly_reject_agrees {b : BookState} {o : Order}
+    (hstop : o.orderType ≠ .stopLimit ∧ o.orderType ≠ .stopMarket)
+    (hc : postOnlyCode o b = .rejectedPostOnly) :
+    (processWithId b o).trades = [] ∧ (processWithId b o).book.bids = b.bids ∧
+    (processWithId b o).book.asks = b.asks ∧ (processWithId b o).book.stops = b.stops := by
+  unfold postOnlyCode at hc
+  split at hc
+  · rename_i hpc
+    simp only [Bool.and_eq_true] at hpc
+    obtain ⟨hpo, hcr⟩ := hpc
+    have hk : ∃ k, computeProcessFuel { b with nextId := o.id }
+        { o with id := o.id, timestamp := b.clock } = k + 1 := ⟨_, rfl⟩
+    obtain ⟨k, hk⟩ := hk
+    unfold processWithId process
+    simp only
+    rw [hk, processOrder.eq_2]
+    have hns : (o.orderType == OrderType.stopLimit || o.orderType == OrderType.stopMarket) = false := by
+      cases ht : o.orderType <;> first | rfl | exact absurd ht hstop.1 | exact absurd ht hstop.2
+    have hwc : wouldCross { o with id := o.id, timestamp := b.clock } { b with nextId := o.id } = true := by
+      rw [← hcr]; rfl
+    simp only [hns, hpo, Bool.false_eq_true, ↓reduceIte, ite_true]
+    split
+    · simp
+    · rename_i hn; exact absurd hwc hn
+  · cases hc
+
+/-- `toSpec` never produces a stop order. -/
+theorem toSpec_not_stop {r : CRequest} {o : Order} (h : r.toSpec = some o) :
+    o.orderType ≠ .stopLimit ∧ o.orderType ≠ .stopMarket := by
+  unfold CRequest.toSpec at h
+  split at h
+  · rename_i s ot m _ _ _
+    split at h
+    · cases h
+    · split at h
+      · cases h
+      · cases h
+        cases ot <;> simp [CRequest.mkOrder, COrderType.specType]
+  · cases h
+
+/-- An order request either is rejected at entry (book unchanged, no trade),
+    or runs `process` on the order `toSpec` gives, with `postOnlyCode` as its
+    result code. -/
+theorem processB_order_cases (cap : Nat) (b : BookState) (r : CRequest) :
+    (processB cap b (.order r)).2 = { book := b, trades := [] } ∨
+    ∃ o, r.toSpec = some o ∧ (processB cap b (.order r)).2 = processWithId b o ∧
+      (processB cap b (.order r)).1 = postOnlyCode o b := by
+  unfold processB
+  simp only
+  split
+  · exact Or.inl rfl
+  · split
+    · exact Or.inl rfl
+    · rename_i o ho
+      split
+      · exact Or.inl rfl
+      · split
+        · exact Or.inl rfl
+        · split
+          · exact Or.inl rfl
+          · exact Or.inr ⟨o, ho, rfl, rfl⟩
+
+/-- Observational form: a post-only rejection emits no trade and leaves the
+    book C can see unchanged. -/
+theorem processB_postOnly_obs {cap : Nat} {b : BookState} {r : CRequest}
+    (hc : (processB cap b (.order r)).1 = .rejectedPostOnly) :
+    (processB cap b (.order r)).2.trades = [] ∧
+    bookView (processB cap b (.order r)).2.book = bookView b := by
+  rcases processB_order_cases cap b r with h' | ⟨o, hto, ho, hco⟩
+  · rw [h']; exact ⟨rfl, rfl⟩
+  · rw [hc] at hco
+    obtain ⟨ht, hb, ha, hs⟩ := postOnly_reject_agrees (toSpec_not_stop hto) hco.symm
+    rw [ho]
+    refine ⟨ht, ?_⟩
+    simp only [bookView, hb, ha, hs]
 
 /-- The loop invariant of the spec survives one `processB` step. -/
 theorem processB_preserves_ProcessInv (cap : Nat) {b : BookState} (req : Req)
@@ -338,10 +442,8 @@ theorem processB_preserves_ProcessInv (cap : Nat) {b : BookState} (req : Req)
           · exact hinv
           · split
             · exact hinv
-            · split
-              · exact hinv
-              · exact ProcessInv_step { b with nextId := o.id } o hinv
-                  (OrderProcOk_of_WellFormed hwf) (OrderRestOk_of_WellFormed hwf)
+            · exact ProcessInv_step { b with nextId := o.id } o hinv
+                (OrderProcOk_of_WellFormed hwf) (OrderRestOk_of_WellFormed hwf)
   | cancel id =>
     simp only
     split
@@ -377,9 +479,7 @@ theorem processB_trades_ok (cap : Nat) (b : BookState) (req : Req) :
           · simp [rejectWith, PostOnlyGuarantee, STPGuarantee]
           · split
             · simp [rejectWith, PostOnlyGuarantee, STPGuarantee]
-            · split
-              · simp [rejectWith, PostOnlyGuarantee, STPGuarantee]
-              · exact ⟨processWithId_PostOnlyGuarantee b o, processWithId_STPGuarantee b o⟩
+            · exact ⟨processWithId_PostOnlyGuarantee b o, processWithId_STPGuarantee b o⟩
   | cancel id =>
     simp only
     split

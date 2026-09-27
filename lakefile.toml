@@ -17,3 +17,7 @@ srcDir = "lean"
 [[lean_lib]]
 name = "UnifiedVerifiedMatchingEngine"
 srcDir = "lean"
+
+[[lean_lib]]
+name = "Matcher"
+srcDir = "lean"

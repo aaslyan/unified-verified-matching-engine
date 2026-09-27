@@ -1,0 +1,167 @@
+import Matcher.Lang
+
+/-!
+# Printing the matcher language as C
+
+`Print.program` renders a `Program` as one C11 translation unit that includes
+`c/gen/engine_db.h` and calls nothing else from the data layer. The dialect
+follows AMCC's printer: `<stdint.h>` fixed-width types, every compound
+expression parenthesised, every integer literal written `UINT64_C(n)`. Both
+`u64` and `code` values print as `uint64_t`.
+
+Where the semantics raises an error, the printed C calls `me_trap()` (which
+aborts): overflow in `me_add`/`me_sub`/`me_mul`, a loop still running at its
+bound, a full trade buffer, and control reaching the end of a function. So a
+compiled run either agrees with a semantic run that ends `.ok`, or stops.
+Contract violations on handles are not re-checked in C; the proof rules them
+out, and Phase 5 tests the data layer against the contract.
+
+Identifiers are printed as given: they must be valid C identifiers, and must
+not start with `me_` or `ME_`, which the printer reserves.
+-/
+
+namespace Matcher.Print
+
+open EngineDbApi Matcher
+
+def cTy : Ty → String
+  | .u64 => "uint64_t"
+  | .code => "uint64_t"
+  | .bool => "bool"
+  | .order => "ME_OrderH"
+  | .level => "ME_LevelH"
+
+def cDefault : Ty → String
+  | .u64 => "UINT64_C(0)"
+  | .code => "UINT64_C(0)"
+  | .bool => "false"
+  | .order => "((ME_OrderH)NULL)"
+  | .level => "((ME_LevelH)NULL)"
+
+def oField : OField → String
+  | .id => "id" | .account => "account" | .side => "side" | .stpMode => "stp_mode"
+  | .price => "price" | .qty => "qty" | .remaining => "remaining"
+
+def lField : LField → String
+  | .price => "price" | .count => "count"
+
+def treeName : Tree → String
+  | .bids => "bids"
+  | .asks => "asks"
+
+def expr : Expr → String
+  | .lit n => s!"UINT64_C({n.toNat})"
+  | .clit c => s!"UINT64_C({c.toNat})"
+  | .blit b => if b then "true" else "false"
+  | .var x => x
+  | .un .not e => s!"(!{expr e})"
+  | .bin op a b =>
+    match op with
+    | .add => s!"me_add({expr a}, {expr b})"
+    | .sub => s!"me_sub({expr a}, {expr b})"
+    | .mul => s!"me_mul({expr a}, {expr b})"
+    | .eq => s!"({expr a} == {expr b})"
+    | .ne => s!"({expr a} != {expr b})"
+    | .lt => s!"({expr a} < {expr b})"
+    | .le => s!"({expr a} <= {expr b})"
+    | .and => s!"({expr a} && {expr b})"
+    | .or => s!"({expr a} || {expr b})"
+  | .nullO => cDefault .order
+  | .nullL => cDefault .level
+  | .isNullO e => s!"({expr e} == NULL)"
+  | .isNullL e => s!"({expr e} == NULL)"
+  | .getO e f => s!"ME_order_get_{oField f}({expr e})"
+  | .getL e f => s!"ME_level_get_{lField f}({expr e})"
+
+def args (es : List Expr) : String := ", ".intercalate (es.map expr)
+
+/-- The C call of an extern operation, or `none` for a malformed one, which
+    the semantics rejects (`arity`/`type`) and the printer turns into a trap. -/
+def extCall : Ext → List Expr → Option String
+  | .orderAlloc, [] => some "ME_order_alloc()"
+  | .levelAlloc, [] => some "ME_level_alloc()"
+  | .orderFree, [h] => some s!"ME_order_free({expr h})"
+  | .levelFree, [l] => some s!"ME_level_free({expr l})"
+  | .setO f, [h, v] => some s!"ME_order_set_{oField f}({expr h}, {expr v})"
+  | .setL .price, [l, v] => some s!"ME_level_set_price({expr l}, {expr v})"
+  | .hashFind, [i] => some s!"ME_hash_find({expr i})"
+  | .hashInsert, [h] => some s!"ME_hash_insert({expr h})"
+  | .hashRemove, [h] => some s!"ME_hash_remove({expr h})"
+  | .qInsertTail, [l, h] => some s!"ME_queue_insert_tail({expr l}, {expr h})"
+  | .qRemove, [l, h] => some s!"ME_queue_remove({expr l}, {expr h})"
+  | .qFirst, [l] => some s!"ME_queue_first({expr l})"
+  | .qNext, [h] => some s!"ME_queue_next({expr h})"
+  | .owner, [h] => some s!"ME_order_owner({expr h})"
+  | .tFind t, [p] => some s!"ME_{treeName t}_find({expr p})"
+  | .tInsert t, [l] => some s!"ME_{treeName t}_insert({expr l})"
+  | .tRemove t, [l] => some s!"ME_{treeName t}_remove({expr l})"
+  | .tBest t, [] => some s!"ME_{treeName t}_best()"
+  | _, _ => none
+
+/-- Does the operation return a value? -/
+def extReturns : Ext → Bool
+  | .orderAlloc | .levelAlloc | .hashFind | .hashInsert | .qFirst | .qNext
+  | .owner | .tFind _ | .tBest _ => true
+  | _ => false
+
+def pad (n : Nat) : String := "".pushn ' ' (2 * n)
+
+/-- Print a statement at indentation `ind`; `depth` names loop counters. -/
+def stmt (ind depth : Nat) : Stmt → String
+  | .skip => ""
+  | .seq a b => stmt ind depth a ++ stmt ind depth b
+  | .assign x e => s!"{pad ind}{x} = {expr e};\n"
+  | .ite c a b =>
+    s!"{pad ind}if ((bool){expr c}) \{\n" ++ stmt (ind + 1) depth a ++
+    s!"{pad ind}} else \{\n" ++ stmt (ind + 1) depth b ++ s!"{pad ind}}\n"
+  | .loop n c body =>
+    let k := s!"me_k{depth}"
+    s!"{pad ind}for (uint64_t {k} = UINT64_C(0);; {k} = {k} + UINT64_C(1)) \{\n" ++
+    s!"{pad (ind + 1)}if (!{expr c}) break;\n" ++
+    s!"{pad (ind + 1)}if ({k} == UINT64_C({n})) me_trap();\n" ++
+    stmt (ind + 1) (depth + 1) body ++ s!"{pad ind}}\n"
+  | .ext dst op es =>
+    match extCall op es, dst with
+    | none, _ => s!"{pad ind}me_trap();\n"
+    | some c, some x => s!"{pad ind}{x} = {c};\n"
+    | some c, none => if extReturns op then s!"{pad ind}(void){c};\n" else s!"{pad ind}{c};\n"
+  | .call dst f es =>
+    match dst with
+    | some x => s!"{pad ind}{x} = {f}({args es});\n"
+    | none => s!"{pad ind}(void){f}({args es});\n"
+  | .emit m t p q => s!"{pad ind}me_emit({expr m}, {expr t}, {expr p}, {expr q});\n"
+  | .ret e => s!"{pad ind}return {expr e};\n"
+
+def decl (p : Ident × Ty) : String := s!"{cTy p.2} {p.1}"
+
+def funDef (fd : FunDef) : String :=
+  let ps := if fd.params.isEmpty then "void" else ", ".intercalate (fd.params.map decl)
+  let locals := String.join (fd.locals.map fun (x, t) => s!"  {cTy t} {x} = {cDefault t};\n")
+  let voids := String.join ((fd.params ++ fd.locals).map fun (x, _) => s!"  (void){x};\n")
+  let reset := if fd.entry then "  me_ntrades = UINT64_C(0);\n" else ""
+  s!"{cTy fd.ret} {fd.name}({ps}) \{\n" ++ locals ++ voids ++ reset ++
+    stmt 1 0 fd.body ++ "  me_trap();\n}\n"
+
+def preamble (tradeCap : Nat) : String :=
+  "/* Generated from lean/Matcher by Matcher.Print.program. Do not edit. */\n" ++
+  "#include \"engine_db.h\"\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdlib.h>\n\n" ++
+  s!"#define ME_TRADE_CAP UINT64_C({max tradeCap 1})\n\n" ++
+  "typedef struct { uint64_t maker; uint64_t taker; uint64_t price; uint64_t qty; } ME_Trade;\n" ++
+  "ME_Trade me_trades[ME_TRADE_CAP];\nuint64_t me_ntrades;\n\n" ++
+  "_Noreturn static inline void me_trap(void) { abort(); }\n" ++
+  "static inline uint64_t me_add(uint64_t a, uint64_t b) {\n" ++
+  "  uint64_t r;\n  if (__builtin_add_overflow(a, b, &r)) me_trap();\n  return r;\n}\n" ++
+  "static inline uint64_t me_sub(uint64_t a, uint64_t b) {\n" ++
+  "  uint64_t r;\n  if (__builtin_sub_overflow(a, b, &r)) me_trap();\n  return r;\n}\n" ++
+  "static inline uint64_t me_mul(uint64_t a, uint64_t b) {\n" ++
+  "  uint64_t r;\n  if (__builtin_mul_overflow(a, b, &r)) me_trap();\n  return r;\n}\n" ++
+  "static inline void me_emit(uint64_t m, uint64_t t, uint64_t p, uint64_t q) {\n" ++
+  "  if (me_ntrades >= ME_TRADE_CAP) me_trap();\n" ++
+  "  me_trades[me_ntrades].maker = m;\n  me_trades[me_ntrades].taker = t;\n" ++
+  "  me_trades[me_ntrades].price = p;\n  me_trades[me_ntrades].qty = q;\n" ++
+  "  me_ntrades = me_ntrades + UINT64_C(1);\n}\n\n"
+
+def program (P : Program) : String :=
+  preamble P.tradeCap ++ "\n".intercalate (P.funs.map funDef)
+
+end Matcher.Print

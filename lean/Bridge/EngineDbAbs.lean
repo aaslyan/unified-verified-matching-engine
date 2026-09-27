@@ -38,7 +38,7 @@ forgotten by the projection `bookView`:
 | `BookState.lastTradePrice` | synthesized `none`; forgotten by `bookView` (only read by stop triggering) |
 | `BookState.nextId` | synthesized `1`; forgotten by `bookView`. `processWithId` overwrites it with the request id (D1) |
 | `BookState.clock` | synthesized `1 + number of resting orders`, strictly above every synthesized timestamp (so `BookOk` holds); forgotten by `bookView` |
-| `PriceLevel.totalQty` (C only) | no spec counterpart; `ClientInv.total_qty` pins it to the sum of remaining quantities |
+| `PriceLevel.total_qty` (C only) | not in the contract: data-layer private state |
 | `Order.account` / `stp_mode` (C) | `stpGroup := stpGroupOf account`, `stpPolicy := stpPolicyOf account stp_mode` |
 -/
 
@@ -443,9 +443,6 @@ structure ClientInv (db : Db) : Prop where
                      db.orders h = some r ∧ r.side = sideCode t ∧
                      r.price = db.levelPrice l ∧ 0 < r.remaining ∧
                      r.remaining ≤ r.qty ∧ r.stpMode ≤ 4
-  /-- `total_qty` is the sum of the remaining quantities (without overflow, D8). -/
-  total_qty      : ∀ t, ∀ l ∈ db.tree t, ∃ lr, db.levels l = some lr ∧
-                     lr.totalQty.toNat = ((db.queue l).map fun h => (db.orderRemaining h).toNat).sum
   /-- Resting prices are positive (C rejects price 0 on priced types, D4). -/
   price_pos      : ∀ t, ∀ l ∈ db.tree t, 0 < db.levelPrice l
   /-- INV-4 on the store: every bid price is below every ask price. -/
@@ -461,7 +458,6 @@ theorem ClientInv_empty : ClientInv Db.empty where
   queue_in_tree := by intro l h hh; cases hh
   hash_iff_queued := by intro h; simp [Db.queued, Db.empty]
   order_ok := by intro t l hl; cases hl
-  total_qty := by intro t l hl; cases hl
   price_pos := by intro t l hl; cases hl
   uncrossed := by intro lb hl; cases hl
 
@@ -744,7 +740,7 @@ theorem freshIn_not_mem (l : List Nat) : freshIn l ∉ l := by
   unfold freshIn at this
   omega
 
-def LevelRow.dflt : LevelRow := { price := 0, totalQty := 0 }
+def LevelRow.dflt : LevelRow := { price := 0 }
 
 /-- `better t p q` as a Boolean. -/
 def betterB : Tree → UInt64 → UInt64 → Bool
@@ -834,23 +830,33 @@ theorem ownerIn_some {db : Db} {h : OrderH} {l : LevelH} (hs : ownerIn db h = so
   have hc := List.find?_some hs
   exact List.contains_iff_mem.mp hc
 
+/-- Allocation in the model: a fresh handle above every live one, if the
+    pool is not full. -/
+def absOrderAlloc {cap : Nat} (s : AbsStore cap) : Option OrderH × AbsStore cap :=
+  if s.db.count < cap then
+    (some (freshIn s.db.oLive),
+     ⟨{ s.db with orders := upd s.db.orders (freshIn s.db.oLive) (some OrderRow.dflt),
+                  oLive := freshIn s.db.oLive :: s.db.oLive }⟩)
+  else (none, s)
+
+def absLevelAlloc {cap : Nat} (s : AbsStore cap) : Option LevelH × AbsStore cap :=
+  if s.db.levelUsed < cap then
+    (some (freshIn s.db.lLive),
+     ⟨{ s.db with levels := upd s.db.levels (freshIn s.db.lLive) (some LevelRow.dflt),
+                  lLive := freshIn s.db.lLive :: s.db.lLive }⟩)
+  else (none, s)
+
+def absHashInsert {cap : Nat} (s : AbsStore cap) (h : OrderH) : Bool × AbsStore cap :=
+  if ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h then (false, s)
+  else (true, ⟨{ s.db with hash := h :: s.db.hash }⟩)
+
 instance (cap : Nat) : EngineDb (AbsStore cap) where
   capacity := cap
   view := AbsStore.db
   init := ⟨Db.empty⟩
-  orderAlloc s :=
-    if s.db.count < cap then
-      (some (freshIn s.db.oLive),
-       ⟨{ s.db with orders := upd s.db.orders (freshIn s.db.oLive) (some OrderRow.dflt),
-                    oLive := freshIn s.db.oLive :: s.db.oLive }⟩)
-    else (none, s)
+  orderAlloc := absOrderAlloc
   orderFree s h := ⟨{ s.db with orders := upd s.db.orders h none, oLive := s.db.oLive.erase h }⟩
-  levelAlloc s :=
-    if s.db.levelUsed < cap then
-      (some (freshIn s.db.lLive),
-       ⟨{ s.db with levels := upd s.db.levels (freshIn s.db.lLive) (some LevelRow.dflt),
-                    lLive := freshIn s.db.lLive :: s.db.lLive }⟩)
-    else (none, s)
+  levelAlloc := absLevelAlloc
   levelFree s l := ⟨{ s.db with levels := upd s.db.levels l none, lLive := s.db.lLive.erase l }⟩
   readOrder s h := s.db.orders h
   writeOrder s h row := ⟨{ s.db with orders := upd s.db.orders h (some row) }⟩
@@ -859,47 +865,48 @@ instance (cap : Nat) : EngineDb (AbsStore cap) where
   levelCount s l := EngineDbApi.levelCount s.db l
   owner s h := ownerIn s.db h
   hashFind s id := s.db.hash.find? (fun h => s.db.orderId h == id)
-  hashInsert s h :=
-    if ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h then (false, s)
-    else (true, ⟨{ s.db with hash := h :: s.db.hash }⟩)
+  hashInsert := absHashInsert
   hashRemove s h := ⟨{ s.db with hash := s.db.hash.erase h }⟩
   qInsertTail s l h :=
-    ⟨{ s.db with queue := upd s.db.queue l (s.db.queue l ++ [h]),
-                 levels := s.db.mapTotal l (· + s.db.orderRemaining h) }⟩
+    ⟨{ s.db with queue := upd s.db.queue l (s.db.queue l ++ [h]) }⟩
   qRemove s l h :=
-    ⟨{ s.db with queue := upd s.db.queue l ((s.db.queue l).erase h),
-                 levels := s.db.mapTotal l
-                   (fun t => if s.db.orderRemaining h ≤ t then t - s.db.orderRemaining h else 0) }⟩
+    ⟨{ s.db with queue := upd s.db.queue l ((s.db.queue l).erase h) }⟩
   qFirst s l := (s.db.queue l).head?
   qNext s h := (ownerIn s.db h).bind (fun l => nextIn (s.db.queue l) h)
   tFind s t p := (s.db.tree t).find? (fun l => s.db.levelPrice l == p)
   tInsert s t l := ⟨{ s.db with tree := upd s.db.tree t (l :: s.db.tree t) }⟩
   tRemove s t l := ⟨{ s.db with tree := upd s.db.tree t ((s.db.tree t).erase l) }⟩
   tBest s t := pickBest t s.db.levelPrice (s.db.tree t)
+  count s := s.db.oLive.length
+  levelsUsed s := s.db.lLive.length
   init_view := rfl
+  init_count := rfl
+  init_levelsUsed := rfl
   orderAlloc_law s hw := by
+    unfold absOrderAlloc
     by_cases hc : s.db.count < cap
     · simp only [hc, if_true]
-      refine ⟨⟨?_, OrderRow.dflt, rfl⟩, by simp; omega⟩
+      refine ⟨⟨?_, OrderRow.dflt, rfl⟩, by simp [Db.count] at hc ⊢; omega⟩
       cases hx : s.db.orders (freshIn s.db.oLive) with
       | none => rfl
       | some r =>
         exact absurd ((hw.orders_live _).mp (by simp [Db.orderLive, hx]))
           (freshIn_not_mem _)
     · simp only [hc, if_false]
-      exact ⟨rfl, by simp; omega⟩
+      exact ⟨rfl, by simp [Db.count] at hc ⊢; omega⟩
   orderFree_law _ _ _ _ := rfl
   levelAlloc_law s hw := by
+    unfold absLevelAlloc
     by_cases hc : s.db.levelUsed < cap
     · simp only [hc, if_true]
-      refine ⟨⟨?_, LevelRow.dflt, rfl⟩, by simp; omega⟩
+      refine ⟨⟨?_, LevelRow.dflt, rfl⟩, by simp [Db.levelUsed] at hc ⊢; omega⟩
       cases hx : s.db.levels (freshIn s.db.lLive) with
       | none => rfl
       | some r =>
         exact absurd ((hw.levels_live _).mp (by simp [Db.levelLive, hx]))
           (freshIn_not_mem _)
     · simp only [hc, if_false]
-      exact ⟨rfl, by simp; omega⟩
+      exact ⟨rfl, by simp [Db.levelUsed] at hc ⊢; omega⟩
   levelFree_law _ _ _ _ := rfl
   readOrder_law _ _ := rfl
   writeOrder_law _ _ _ _ _ := rfl
@@ -919,6 +926,7 @@ instance (cap : Nat) : EngineDb (AbsStore cap) where
       exact List.find?_eq_none.mp hf h hh (by simp [heq])
     | some h => exact ⟨List.mem_of_find?_eq_some hf, by simpa using List.find?_some hf⟩
   hashInsert_law s h _ _ := by
+    unfold absHashInsert
     by_cases hc : ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h
     · simp [hc, hashInsert.post]
     · simp [hc, hashInsert.post]
@@ -945,5 +953,55 @@ instance (cap : Nat) : EngineDb (AbsStore cap) where
     cases hb : pickBest t s.db.levelPrice (s.db.tree t) with
     | none => exact pickBest_none.mp hb
     | some l => exact pickBest_some hb
+  count_orderAlloc s h hs := by
+    show (absOrderAlloc s).2.db.oLive.length = s.db.oLive.length + 1
+    by_cases hc : s.db.count < cap
+    · simp [absOrderAlloc, hc]
+    · simp [absOrderAlloc, hc] at hs
+  count_orderFree s h hw hpre := by
+    show (s.db.oLive.erase h).length + 1 = s.db.oLive.length
+    rw [List.length_erase_of_mem ((hw.orders_live h).mp hpre.1)]
+    have : 0 < s.db.oLive.length := List.length_pos_of_mem ((hw.orders_live h).mp hpre.1)
+    omega
+  count_levelAlloc s := by
+    show (absLevelAlloc s).2.db.oLive.length = s.db.oLive.length
+    by_cases hc : s.db.levelUsed < cap <;> simp [absLevelAlloc, hc]
+  count_levelFree _ _ := rfl
+  count_writeOrder _ _ _ := rfl
+  count_writeLevel _ _ _ := rfl
+  count_hashInsert s h := by
+    show (absHashInsert s h).2.db.oLive.length = s.db.oLive.length
+    by_cases hc : ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h <;>
+      simp [absHashInsert, hc]
+  count_hashRemove _ _ := rfl
+  count_qInsertTail _ _ _ := rfl
+  count_qRemove _ _ _ := rfl
+  count_tInsert _ _ _ := rfl
+  count_tRemove _ _ _ := rfl
+  levelsUsed_levelAlloc s l hs := by
+    show (absLevelAlloc s).2.db.lLive.length = s.db.lLive.length + 1
+    by_cases hc : s.db.levelUsed < cap
+    · simp [absLevelAlloc, hc]
+    · simp [absLevelAlloc, hc] at hs
+  levelsUsed_levelFree s l hw hpre := by
+    show (s.db.lLive.erase l).length + 1 = s.db.lLive.length
+    rw [List.length_erase_of_mem ((hw.levels_live l).mp hpre.1)]
+    have : 0 < s.db.lLive.length := List.length_pos_of_mem ((hw.levels_live l).mp hpre.1)
+    omega
+  levelsUsed_orderAlloc s := by
+    show (absOrderAlloc s).2.db.lLive.length = s.db.lLive.length
+    by_cases hc : s.db.count < cap <;> simp [absOrderAlloc, hc]
+  levelsUsed_orderFree _ _ := rfl
+  levelsUsed_writeOrder _ _ _ := rfl
+  levelsUsed_writeLevel _ _ _ := rfl
+  levelsUsed_hashInsert s h := by
+    show (absHashInsert s h).2.db.lLive.length = s.db.lLive.length
+    by_cases hc : ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h <;>
+      simp [absHashInsert, hc]
+  levelsUsed_hashRemove _ _ := rfl
+  levelsUsed_qInsertTail _ _ _ := rfl
+  levelsUsed_qRemove _ _ _ := rfl
+  levelsUsed_tInsert _ _ _ := rfl
+  levelsUsed_tRemove _ _ _ := rfl
 
 end EngineDbAbs

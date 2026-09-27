@@ -1,5 +1,63 @@
 # STATUS-v2
 
+## Phase 2 — The matcher language
+
+**Date:** 2026-09-27. **Base commit:** `9f68faa`. **Phase commit:** see `git log -- lean/Matcher`.
+
+**Files added or changed**
+
+| File | Change |
+|---|---|
+| `lean/Matcher/Lang.lean` | New. Syntax, values, and an executable semantics parametric in `[EngineDb S]`. |
+| `lean/Matcher/Print.lean` | New. C11 printer, AMCC's dialect; only calls `engine_db.h`. |
+| `lean/Matcher/Example.lean` | New. A program using every construct; `main` prints it and runs it on the model store. |
+| `c/gen/engine_db.h` | New. The contract's C face. |
+| `scripts/matcher_fragment_check.sh` | New. Prints the example and compiles it under gcc and clang. |
+| `docs/plan-v2/FRAGMENT.md` | Every construct, its C printing, its semantics; obligations carried forward. |
+| `lean/Bridge/EngineDbFrame.lean` | New. Frame laws for payload writes (follow-up item 2). |
+| `lean/Bridge/EngineDbApi.lean`, `EngineDbApiLaws.lean`, `EngineDbAbs.lean` | Level totals removed from the contract; `count`/`levelsUsed` are class operations with laws (follow-up items 2, 3). |
+| `lean/Bridge/ProcessB.lean` | Post-only decided in one place (follow-up item 4). |
+| `lakefile.toml` | New `lean_lib Matcher`. |
+| `lean/UnifiedVerifiedMatchingEngine.lean` | Imports the new modules. |
+
+**Acceptance.** `lake build` clean (91 jobs). `scripts/matcher_fragment_check.sh`: the printed program compiles under gcc 13.3 and clang 19.1 with `-std=c11 -Wall -Wextra -Werror` ("fragment check: gcc OK", "clang OK"). The same program runs under the Lean semantics on the model store: two orders rest, a cancel removes one, a reused id is refused, and `x + 1` at the maximum is an `overflow` error.
+
+**Theorems proved (new or changed this phase)**
+- `EngineDb (AbsStore cap)`: all laws, including the new `count`/`levelsUsed` laws.
+- `readOrder_writeOrder_same`, `readOrder_writeOrder_other`, `writeOrder_frame`, and the three level analogues: get after set; other rows unchanged; queues, hash, trees, validity and pool counts unchanged.
+- `postOnly_reject_agrees`, `processB_postOnly_obs`, `processB_order_cases`, `toSpec_not_stop`.
+- Transfer lemmas re-proved on the restructured `processB`.
+
+`#print axioms`: `Matcher.execStmt` uses no axioms; frame laws `[propext]`; `processB` lemmas and the instance `[propext, Classical.choice, Quot.sound]` or fewer.
+
+**`sorry` count:** 0 in every Phase 1 and Phase 2 file. Project total unchanged: 2 in `ForwardSimulation.lean` (Phase 4).
+
+**Tests:** Lean `runAllTests` 18/18; `processB` re-run on the ten representative requests, same result codes as Phase 1.
+
+**Follow-up items (from review of Phase 1)**
+1. *Integer widths.* Done. One integer type (`u64`); enumerations are type `code`, equality only; every numeric value prints as `uint64_t`; `engine_db.h` is all `uint64_t`. The handwritten data layer's `uint8_t side, stp_mode` get widened in Phase 3 behind `engine_db.h` (edit to be listed then).
+2. *Payload access.* The in-scope matcher writes order `id, account, side, stp_mode, price, qty, remaining` (resting a new order; `remaining` on each fill), writes level `price` (new level), and reads order `id, account, remaining, side`, level `price, count`, and the owner level (cancel). All are language constructs with frame laws. **Level totals:** no in-scope path reads one (`total_qty` is only ever decremented), so totals are out of the contract. The data layer maintains them privately, including in `ME_order_set_remaining`.
+3. *`count`.* It is a class operation, as is `levelsUsed`, with laws: init 0; alloc +1; free −1; every other operation unchanged; alloc fails iff `capacity ≤ count`. The last is "iff `count = capacity`" under `count ≤ capacity`, which is an `Inv` clause for Phase 4 (the contract alone cannot bound an arbitrary store). No proof uses the model's lists.
+4. *Post-only.* `process` does reject a crossing post-only order, so the pre-check is gone. `processB` always takes book and trades from `process`; `postOnlyCode` reports the rejection, and `postOnly_reject_agrees` proves it is exactly what `process` did (no trade; bids, asks, stops unchanged).
+5. *Level-pool sizing.* Recorded in FRAGMENT.md and PLAN.md as a Phase 4 obligation: "no empty level" and levels ≤ orders go into `Inv`; Phase 3 frees a level when its last order leaves.
+
+**Cancel and the papers.** `paper_formal_spec/paper.tex` scopes its Lean claim correctly: line 124 says "every book reachable from the empty book by a finite sequence of well-formed orders", which excludes cancels. Line 1454, "every book reachable from an empty start", is in the `process` context but should say "by `process`" to avoid being read as covering cancels. Cancel is now covered (`cancelOrder_preserves_ProcessInv`, `runB_BookInvariant`); amend still has no invariant theorem. The Zenodo follow-up is not in this repository and was not checked.
+
+**Decisions settled from the repo**
+- Loops are `while (c)` with a literal bound; exceeding it is an error, printed as a trap. `break`/`continue` are not in the language; the printer uses `break` only inside its own loop form.
+- The printer does not re-check handle contracts in C (the proof covers them); it does check overflow, loop bounds and the trade buffer.
+- `if` conditions print as `if ((bool)e)`: clang rejects `if ((a == b))` under `-Werror`.
+
+**⚑ decisions needing Ara:** none.
+
+**Deviations from the plan**
+- Phase 1 files changed in Phase 2 (totals removed, pool counts as class operations, post-only restructure), at the review's request.
+- Paths: `lean/Matcher/` with a new `lean_lib Matcher`; `scripts/matcher_fragment_check.sh` added to make the acceptance check repeatable.
+
+**Next phase:** Phase 3 — port the matcher. First task: write the entry checks of `ProcessOrder` in the language, in exactly `processB`'s order (unsupported, invalid, duplicate, capacity), and the thin adapter implementing `engine_db.h` on the handwritten data layer (widen `side`/`stp_mode`; maintain `total_qty` in `ME_order_set_remaining`).
+
+---
+
 ## Phase 1 — Contract
 
 **Date:** 2026-09-27. **Base commit:** `c57f173`. **Phase commit:** see `git log -- lean/Bridge/ProcessB.lean`.

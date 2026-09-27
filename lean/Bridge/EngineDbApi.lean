@@ -34,13 +34,13 @@ an operation outside `pre` is undefined behaviour: the client must prove
 returned value. Allocation is the only nondeterministic operation: it may
 fail (`none`, state unchanged) at any time, modelling `malloc` returning NULL.
 
-## `total_qty`
+## Level totals
 
-`PriceLevel.totalQty` is maintained by the generated queue operations:
-`InsertTail` adds the order's remaining quantity and `Remove` subtracts it.
-A fill changes an order's remaining quantity in place, and no generated
-operation covers that, so the client adjusts `totalQty` itself on fills and
-only then. Writing it on any other path double-counts (divergence D7).
+`PriceLevel.total_qty` is not part of this contract. No in-scope matcher path
+reads a total, and the one bug found in this area (divergence D7, a double
+subtraction) came from two parties writing it. Totals, if a data layer keeps
+them, are its private state: it maintains them itself, including when the
+matcher changes an order's remaining quantity through `writeOrder`.
 
 ## Key fields
 
@@ -68,7 +68,6 @@ structure OrderRow where
 /-- The client-visible fields of `struct PriceLevel`. -/
 structure LevelRow where
   price    : UInt64
-  totalQty : UInt64
   deriving DecidableEq, Repr
 
 /-- Which price tree. -/
@@ -246,24 +245,15 @@ def qInsertTail.pre (db : Db) (l : LevelH) (h : OrderH) : Prop :=
 def Db.orderRemaining (db : Db) (h : OrderH) : UInt64 :=
   ((db.orders h).map OrderRow.remaining).getD 0
 
-/-- Apply `f` to the `totalQty` of level `l`. -/
-def Db.mapTotal (db : Db) (l : LevelH) (f : UInt64 → UInt64) : LevelH → Option LevelRow :=
-  upd db.levels l ((db.levels l).map fun r => { r with totalQty := f r.totalQty })
-
-/-- `PriceLevel_orders_InsertTail`. Also adds the order's remaining quantity
-    to the level's `total_qty` (wrapping, as `uint64_t` does). -/
+/-- `PriceLevel_orders_InsertTail`. -/
 def qInsertTail.post (db : Db) (l : LevelH) (h : OrderH) (db' : Db) : Prop :=
-  db' = { db with queue := upd db.queue l (db.queue l ++ [h]),
-                  levels := db.mapTotal l (· + db.orderRemaining h) }
+  db' = { db with queue := upd db.queue l (db.queue l ++ [h]) }
 
 def qRemove.pre (db : Db) (l : LevelH) (h : OrderH) : Prop := h ∈ db.queue l
 
-/-- `PriceLevel_orders_Remove`. Also subtracts the order's remaining quantity
-    from the level's `total_qty`, stopping at `0` rather than wrapping. -/
+/-- `PriceLevel_orders_Remove`. -/
 def qRemove.post (db : Db) (l : LevelH) (h : OrderH) (db' : Db) : Prop :=
-  db' = { db with queue := upd db.queue l ((db.queue l).erase h),
-                  levels := db.mapTotal l
-                    (fun t => if db.orderRemaining h ≤ t then t - db.orderRemaining h else 0) }
+  db' = { db with queue := upd db.queue l ((db.queue l).erase h) }
 
 /-- `PriceLevel_orders_First`. -/
 def qFirst.pre (db : Db) (l : LevelH) : Prop := db.levelLive l
@@ -348,15 +338,21 @@ class EngineDb (S : Type) where
   tInsert : S → Tree → LevelH → S
   tRemove : S → Tree → LevelH → S
   tBest : S → Tree → Option LevelH
+  /-- Live order rows (`order_pool_n`). -/
+  count : S → Nat
+  /-- Live level rows (`level_pool_n`). -/
+  levelsUsed : S → Nat
   init_view : view init = Db.empty
+  init_count : count init = 0
+  init_levelsUsed : levelsUsed init = 0
   orderAlloc_law : ∀ s, (view s).WF →
     EngineDbApi.orderAlloc.post (view s) (orderAlloc s).1 (view (orderAlloc s).2) ∧
-    ((orderAlloc s).1 = none ↔ capacity ≤ (view s).count)
+    ((orderAlloc s).1 = none ↔ capacity ≤ count s)
   orderFree_law : ∀ s h, (view s).WF → EngineDbApi.orderFree.pre (view s) h →
     EngineDbApi.orderFree.post (view s) h (view (orderFree s h))
   levelAlloc_law : ∀ s, (view s).WF →
     EngineDbApi.levelAlloc.post (view s) (levelAlloc s).1 (view (levelAlloc s).2) ∧
-    ((levelAlloc s).1 = none ↔ capacity ≤ (view s).levelUsed)
+    ((levelAlloc s).1 = none ↔ capacity ≤ levelsUsed s)
   levelFree_law : ∀ s l, (view s).WF → EngineDbApi.levelFree.pre (view s) l →
     EngineDbApi.levelFree.post (view s) l (view (levelFree s l))
   readOrder_law : ∀ s h, readOrder s h = (view s).orders h
@@ -386,5 +382,33 @@ class EngineDb (S : Type) where
   tRemove_law : ∀ s t l, (view s).WF → EngineDbApi.tRemove.pre (view s) t l →
     EngineDbApi.tRemove.post (view s) t l (view (tRemove s t l))
   tBest_law : ∀ s t, (view s).WF → EngineDbApi.tBest.post (view s) t (tBest s t)
+  -- Pool usage: alloc +1, free −1, every other operation unchanged.
+  count_orderAlloc : ∀ s h, (orderAlloc s).1 = some h → count (orderAlloc s).2 = count s + 1
+  count_orderFree : ∀ s h, (view s).WF → EngineDbApi.orderFree.pre (view s) h →
+    count (orderFree s h) + 1 = count s
+  count_levelAlloc : ∀ s, count (levelAlloc s).2 = count s
+  count_levelFree : ∀ s l, count (levelFree s l) = count s
+  count_writeOrder : ∀ s h row, count (writeOrder s h row) = count s
+  count_writeLevel : ∀ s l row, count (writeLevel s l row) = count s
+  count_hashInsert : ∀ s h, count (hashInsert s h).2 = count s
+  count_hashRemove : ∀ s h, count (hashRemove s h) = count s
+  count_qInsertTail : ∀ s l h, count (qInsertTail s l h) = count s
+  count_qRemove : ∀ s l h, count (qRemove s l h) = count s
+  count_tInsert : ∀ s t l, count (tInsert s t l) = count s
+  count_tRemove : ∀ s t l, count (tRemove s t l) = count s
+  levelsUsed_levelAlloc : ∀ s l, (levelAlloc s).1 = some l →
+    levelsUsed (levelAlloc s).2 = levelsUsed s + 1
+  levelsUsed_levelFree : ∀ s l, (view s).WF → EngineDbApi.levelFree.pre (view s) l →
+    levelsUsed (levelFree s l) + 1 = levelsUsed s
+  levelsUsed_orderAlloc : ∀ s, levelsUsed (orderAlloc s).2 = levelsUsed s
+  levelsUsed_orderFree : ∀ s h, levelsUsed (orderFree s h) = levelsUsed s
+  levelsUsed_writeOrder : ∀ s h row, levelsUsed (writeOrder s h row) = levelsUsed s
+  levelsUsed_writeLevel : ∀ s l row, levelsUsed (writeLevel s l row) = levelsUsed s
+  levelsUsed_hashInsert : ∀ s h, levelsUsed (hashInsert s h).2 = levelsUsed s
+  levelsUsed_hashRemove : ∀ s h, levelsUsed (hashRemove s h) = levelsUsed s
+  levelsUsed_qInsertTail : ∀ s l h, levelsUsed (qInsertTail s l h) = levelsUsed s
+  levelsUsed_qRemove : ∀ s l h, levelsUsed (qRemove s l h) = levelsUsed s
+  levelsUsed_tInsert : ∀ s t l, levelsUsed (tInsert s t l) = levelsUsed s
+  levelsUsed_tRemove : ∀ s t l, levelsUsed (tRemove s t l) = levelsUsed s
 
 end EngineDbApi
