@@ -40,7 +40,7 @@ def restFun : FunDef where
     .ext (some "o") .orderAlloc [],
     .ite (.isNullO (v "o")) (.ret (.clit 1)) .skip,
     .call (some "fill") "min_u64" [v "qty", u 5],
-    .assign "rem" (b2 .sub (v "qty") (v "fill")),
+    .assign "rem" (b2 .sub (v "qty") (b2 .div (v "fill") (u 1))),
     .ext none (.setO .id) [v "o", v "id"],
     .ext none (.setO .account) [v "o", u 7],
     .ext none (.setO .side) [v "o", v "side"],
@@ -61,7 +61,7 @@ def restFun : FunDef where
     .ext (some "ok") .hashInsert [v "o"],
     .ite (.un .not (v "ok")) (.ret (.clit 2)) .skip,
     .ext (some "p") .qFirst [v "lv"],
-    .loop 8 (.un .not (.isNullO (v "p"))) (Stmt.block [
+    .loop (.lit 8) (.un .not (.isNullO (v "p"))) (Stmt.block [
       .assign "n" (b2 .add (v "n") (u 1)),
       .emit (.getO (v "p") .id) (v "id") (.getO (v "p") .price) (.getO (v "p") .remaining),
       .ext (some "p") .qNext [v "p"]]),
@@ -83,8 +83,8 @@ def cancelFun : FunDef where
     .ext (some "o") .hashFind [v "id"],
     .ite (.isNullO (v "o")) (.ret (.clit 1)) .skip,
     .ext (some "lv") .owner [v "o"],
-    .assign "same" (b2 .eq (v "o") .nullO),
-    .ite (b2 .ne (v "lv") .nullL) .skip (.ret (.clit 1)),
+    .assign "same" (b2 .lt .count .capacity),
+    .ite (.isNullL (v "lv")) (.ret (.clit 1)) .skip,
     .ext none .qRemove [v "lv", v "o"],
     .ext none .hashRemove [v "o"],
     .ext none .orderFree [v "o"],
@@ -120,7 +120,7 @@ def succFun : FunDef where
 
 def program : Program where
   funs := [minFun, restFun, cancelFun, asksFun, succFun]
-  tradeCap := 8
+  tradeCap := .capPlus 1
 
 def showRun (r : Except Err (Val × AbsStore 4 × List ProcessB.TradeObs)) : String :=
   match r with

@@ -30,13 +30,16 @@ No narrow integer type exists, so C's integer promotion never applies.
 | `var x` | the local's value; `unbound` if absent | `x` |
 | `un .not e` | Boolean negation | `(!e)` |
 | `bin .add/.sub/.mul` on `u64` | exact result; **`overflow` error** if it leaves `[0, 2^64)` | `me_add/me_sub/me_mul(a, b)`, which trap on overflow |
-| `bin .eq/.ne` | on `u64`, `code`, `bool`, and handles of one kind | `(a == b)`, `(a != b)` |
+| `bin .div` on `u64` | quotient; **`overflow` error** on a zero divisor | `me_div(a, b)`, which traps on zero |
+| `bin .eq/.ne` | on `u64`, `code`, `bool`; **not on handles** | `(a == b)`, `(a != b)` |
 | `bin .lt/.le` | on `u64` only | `(a < b)`, `(a <= b)` |
-| `bin .and/.or` | on `bool` | `(a && b)`, `(a \|\| b)` |
+| `bin .and/.or` | on `bool`, **short-circuit**: the right operand is not evaluated when the left decides | `(a && b)`, `(a \|\| b)` |
 | `nullO`, `nullL` | the null handle | `((ME_OrderH)NULL)` |
 | `isNullO e`, `isNullL e` | is the handle null | `(e == NULL)` |
 | `getO e f` | field `f` of the order row; **`invalidHandle`** if null or dead | `ME_order_get_f(e)` |
 | `getL e .price`, `getL e .count` | level price; queue length | `ME_level_get_price(e)`, `ME_level_get_count(e)` |
+| `capacity` | the store's capacity (`EngineDb.capacity`) | `ME_capacity()` |
+| `count` | the store's live order count (`EngineDb.count`) | `ME_order_count()` |
 
 Any other operand combination is a `type` error.
 
@@ -48,14 +51,46 @@ Any other operand combination is a `type` error.
 | `seq a b` | `a`, then `b` unless `a` returned | `a b` |
 | `assign x e` | set an existing local; its type must not change | `x = e;` |
 | `ite c a b` | branch on a `bool` | `if ((bool)c) { a } else { b }` |
-| `loop n c body` | while `c`, at most `n` iterations; **`bound` error** if `c` still holds after `n` | `for (k = 0;; k++) { if (!c) break; if (k == n) me_trap(); body }` |
+| `loop b c body` | while `c`, at most `b` iterations; **`bound` error** if `c` still holds after `b` | `for (k = 0, n = b;; k++) { if (!c) break; if (k == n) me_trap(); body }` |
 | `ext dst op args` | EngineDb operation `op`; its contract precondition is checked on the store's view and a violation is a **`contract` error** | a call to the matching `engine_db.h` function |
 | `call dst f args` | call a function defined in the program; fresh locals; its return value | `dst = f(args);` |
-| `emit m t p q` | append trade (maker, taker, price, qty); **`tradeBuffer` error** when full | `me_emit(m, t, p, q);` (traps when full) |
+| `emit m t p q` | append trade (maker, taker, price, qty); **`tradeBuffer` error** once the program's `tradeCap` bound is reached | `me_emit(m, t, p, q);`: traps at the same bound, then calls `ME_trade_emit` |
 | `ret e` | return | `return e;` |
+
+**Bounds.** A loop bound, and the program's trade-buffer bound, is `lit n` or
+`capPlus k` (capacity + k). The semantics evaluates `capPlus k` from the store's
+`capacity`; the printed C evaluates `me_add(ME_capacity(), UINT64_C(k))` once
+per loop. Both read the same quantity, so the error paths agree; there is no
+independent `#define`. A bound that does not fit `uint64_t` is an `overflow`
+error in the semantics and a trap in C.
+
+**Traps stay in the shipped build.** Overflow, division by zero, loop bounds
+and the trade buffer are checked in the printed C; the proof shows they are
+unreachable, and Phase 5 compares Lean error against C trap exactly.
 
 A function that ends without `ret` is a `noReturn` error; its printed body
 ends in `me_trap()`. Call nesting is bounded by `fuel` (`fuel` error).
+
+## No handle
+
+"No handle" is not a sentinel the matcher compares against. A handle value is
+`Val.order (Option OrderH)` or `Val.level (Option LevelH)`: absence is the
+option's `none`, tested only with `isNullO` / `isNullL`. The language has no
+equality on handles, so no program can compare a handle with a value. Each
+operation that can return no handle has a law saying exactly when it does
+(`lean/Bridge/EngineDbApi.lean`):
+
+| Operation | Returns no handle exactly when | Law |
+|---|---|---|
+| `tBest t` | tree `t` is empty | `tBest.post`: `none` ↔ `tree t = []` |
+| `qFirst l` | `l`'s queue is empty | `qFirst.post`: result = `queue l`'s `head?` |
+| `qNext h` | `h` is last in its queue | `qNext.post`: result = `nextIn (queue l) h` |
+| `hashFind id` | no hashed order has that id | `hashFind.post`: `none` → every hashed id differs |
+| `tFind t p` | no level of `t` has price `p` | `tFind.post`: `none` → every price differs |
+| `owner h` | `h` is in no queue | `owner.post`: `none` → `¬ queued h` |
+| `orderAlloc`, `levelAlloc` | the pool is full | alloc laws: `none` ↔ `capacity ≤ count` (resp. `levelsUsed`) |
+
+In C the absent handle is `NULL`, and the test prints as `(e == NULL)`.
 
 ## Extern operations and their contract checks
 
@@ -105,11 +140,10 @@ failure. It does not re-check handle contracts; the proof rules those out
   the Phase 1 bounds (`qty ≤ qmax cap`, `(cap + 1) · qmax cap < 2^64`): fills are
   at most both operands, so subtractions never underflow; sums are bounded by
   the product; prices and ids are only compared.
-- **Phase 3.** The handwritten data layer stores `side` and `stp_mode` as
-  `uint8_t` and keeps `total_qty`. Behind `engine_db.h` the side and STP-mode
-  fields are widened to `uint64_t` (an edit to list in STATUS, not a range
-  check), and `ME_order_set_remaining` must maintain the owner level's
-  `total_qty`, which the contract no longer mentions.
+- **Phase 3 (done).** `side` and `stp_mode` are widened to `uint64_t` in
+  `c/include/matching_engine_gen.h`; the adapter (`c/gen/engine_db_adapter.c`)
+  maintains `total_qty` in `ME_order_set_remaining`. Phase 5's contract tests
+  target the adapter and data layer as linked.
 - **Phase 6.** Linking this semantics to `CSubset`: running the matcher program
   with the store instantiated by the AMCC-generated data layer must equal
   running the whole generated C program under `CSubset` semantics. Until then,

@@ -1,5 +1,80 @@
 # STATUS-v2
 
+## Phase 3 — Port the matcher
+
+**Date:** 2026-09-27. **Base commit:** `f9c69e0`. **Phase commit:** see `git log -- c/gen/matcher.c`.
+
+**Files added or changed**
+
+| File | Change |
+|---|---|
+| `lean/Matcher/Program.lean` | New. The matcher AST: `gen_process_order`, `gen_process_buy`/`gen_process_sell` (one generator, `sideFun`), `gen_cancel_order`, `gen_min_u64`. |
+| `c/gen/matcher.c` | New, printed (`scripts/gen_matcher.sh`; `--check` verifies it is current). 443 lines, no arrays, no pointer arithmetic. |
+| `c/gen/engine_db_adapter.c`, `.h` | New. `engine_db.h` on the handwritten data layer (below the line; details under "Adapter"). |
+| `c/gen/matcher_glue.c` | New. The public `MatchingEngine_*` API over the generated matcher, so the existing tests run unchanged. |
+| `c/include/matching_engine_gen.h` | **Edit to the handwritten data layer:** `Order.side` and `Order.stp_mode` widened from `uint8_t` to `uint64_t` (integer rule). |
+| `Makefile` | Targets `test-gen`, `gen-matcher`, and the objects of the generated build. The handwritten engine is linked into it with its matcher entry points renamed by `-D` (no source edit), for `MatchingEngine_CheckInvariants` only. |
+| `lean/Matcher/Lang.lean`, `Print.lean` | Bounds `capPlus k`; `capacity`, `count`, `div`; `&&`/`\|\|` short-circuit; handle equality removed; trade sink; unused-helper attribute for clang. |
+| `c/gen/engine_db.h` | `ME_capacity`, `ME_order_count`, `ME_trade_reset`, `ME_trade_emit`. |
+| `lean/Bridge/EngineDbFrame.lean` | `init_empty`: the initial store has no valid handle, both counts 0, no hash, tree or queue entry. |
+| `lean/Matcher/CheckLean.lean`, `Emit.lean` | New. Lean-side differential check; printer entry point. |
+| `c/tests/diff_driver.c`, `scripts/matcher_c_diff.sh` | New. C-side differential against the handwritten engine. |
+| `docs/plan-v2/FRAGMENT.md` | Bounds, short-circuit, no-handle section, trap policy. |
+
+**Acceptance**
+- `c/gen/matcher.c` compiles with `-std=c11 -Wall -Wextra -Werror` under gcc 13.3 and clang 19.1, each at `-O0` and `-O2`.
+- **C test tally against generated matcher + handwritten data layer (`make test-gen`): 7/7 pass.** `make test` (handwritten engine, with the widened struct) also 7/7. No test fails on capacity or duplicate id: the tests stay far below capacity (1,000,000 in the glue) and the handwritten engine already rejects an id that is resting, as §4 does. So there are no ⚑ expected-failure items.
+
+**Evidence beyond acceptance**
+- **Lean differential** (`lean/Matcher/CheckLean.lean`): the matcher program under the Lean semantics on the model store against `processB`, comparing result code, trades and `bookView` after every request. **72,000 requests** (400 streams × 60, at capacities 2, 6 and 20), **0 mismatches**; all eight result codes occur (capacity rejections: 7,794 at cap 2).
+- **C differential** (`scripts/matcher_c_diff.sh`): generated matcher + adapter + handwritten data layer against the handwritten engine; return value, trades, full book (every level, every order's remaining, `orders_n`, `total_qty`) and `MatchingEngine_CheckInvariants` after every call. **100,000 calls** (seeds 1000–1099 × 1,000 calls) plus 6,000 (seeds 1–20 × 300): **traces identical, invariants hold after every call.** At capacity 1,000,000 with small quantities the §4 changes never trigger, so the two engines must agree exactly, and they do.
+
+**A bug found by the Lean differential.** The first run failed on the sixth request: the language evaluated both operands of `&&`, while C short-circuits, so the post-only test `best != NULL && crosses(best.price)` read a null handle in Lean. The semantics now short-circuits `&&` and `\|\|`, as C and AMCC's `CSubset` do. Without the check this would have surfaced as an unprovable case in Phase 4.
+
+**Adapter (`c/gen/engine_db_adapter.c`): every function and what it maintains**
+
+| Functions | Implementation | Maintains |
+|---|---|---|
+| `ME_capacity`, `ME_order_count` | adapter's capacity; `order_pool_n` | — |
+| `ME_order_alloc`, `ME_level_alloc` | `NULL` iff `order_pool_n` / `level_pool_n` ≥ capacity, else the pool's alloc | the capacity law; `ME_adapter_init` reserves ≥ capacity rows in each pool so an allocation below capacity cannot fail |
+| `ME_order_free`, `ME_level_free` | pool free | — |
+| `ME_order_get_*`, `ME_order_set_*` (7 fields) | field access; `side`, `stp_mode` now `uint64_t` | exactness (widened, no range check) |
+| `ME_order_set_remaining` | also adds `new - old` to the owner level's `total_qty` when queued | `total_qty` = sum of remaining in the level (data-layer invariant, not in the contract) |
+| `ME_level_get_price`, `ME_level_set_price`, `ME_level_get_count` | fields; `orders_n` | — |
+| `ME_hash_find/insert/remove` | `EngineDb_ind_order_*` | — |
+| `ME_queue_insert_tail/remove/first/next` | `PriceLevel_orders_*` (which add/subtract `total_qty`) | `total_qty` on insert/remove |
+| `ME_order_owner` | `p_price_level` when `orders_inlist`, else `NULL` | — |
+| `ME_bids_*`, `ME_asks_*` | `EngineDb_bids_*`, `EngineDb_asks_*` | — |
+| `ME_trade_reset`, `ME_trade_emit` | buffer of capacity + 1 | — |
+
+Phase 5's contract tests must target the adapter and data layer as linked.
+
+**Folded-in items (from review of Phase 2)**
+1. Loop bounds: every loop in the matcher is `capPlus 1` (capacity + 1), and the trade buffer is `capPlus 1`; C evaluates `me_add(ME_capacity(), UINT64_C(1))`, the same quantity. No `#define` bound remains.
+2. Traps stay in the shipped build (overflow, division by zero, loop bound, trade buffer).
+3. "No handle": `Option` in the semantics, tested only by `isNullO`/`isNullL`; handle equality removed from the language; one law per operation says when it returns none (FRAGMENT.md, "No handle").
+4. Post-only: decided in `gen_process_buy/sell` after the entry checks and before any trade, returning `rejectedPostOnly` (code 6), the code `processB` gives.
+5. Adapter: table above.
+6. Empty store: `init` already existed with `view init = Db.empty` and counts 0; `init_empty` now states no valid handle and no index entry.
+7. Entry checks in `processB`'s order (unsupported, invalid, duplicate, capacity); a level is freed when its last order leaves (after matching, in cancel, and on the unreachable hash-insert rollback); STP triggers on nonzero equal accounts with the incoming mode ≠ NONE, as `selfTradeConflict` decides.
+
+**Decisions settled from the repo**
+- Result codes in C: accepted 0, cancelled 1, unsupported 2, invalid 3, duplicate 4, capacity 5, post-only 6, unknown id 7 (`MatcherProgram.codeOf`).
+- The two `orderAlloc`/`levelAlloc` null branches after the entry checks, and the hash-insert rollback, are unreachable under `Inv`; they return `rejectedCapacity` / `rejectedDuplicate` so the program is total. Phase 4 proves them unreachable.
+- `qmax` is computed in the matcher as `(2^64 − 1) / (capacity + 1)`, which needs `capacity + 1 < 2^64`: a Phase 4 assumption on the store, stated with `Inv`.
+- Trades leave the matcher through `ME_trade_emit`, so `matcher.c` has no array.
+
+**⚑ decisions needing Ara:** none.
+
+**Deviations from the plan**
+- Plan §4 said "static trade buffer" in the matcher; the buffer is in the adapter behind `ME_trade_emit`, bounded identically, so the printed matcher has no array.
+- The handwritten data layer header was edited (field widening), as the Phase 2 review directed; no other handwritten C changed.
+- Paths: `lean/Matcher/Program.lean`, `c/gen/`; the Lean and C differential checks were added as Phase 3 evidence ahead of Phase 5.
+
+**Next phase:** Phase 4 — prove it. First task: state `Inv` (the coupling: `view s` well-formed, `ClientInv`, `absBook (view s)` = the spec book modulo the view, `count s` = book size ≤ capacity, levels ≤ orders with no empty level, hash ↔ book ids, `capacity + 1 < 2^64`), then the rejection-branch lemmas.
+
+---
+
 ## Phase 2 — The matcher language
 
 **Date:** 2026-09-27. **Base commit:** `9f68faa`. **Phase commit:** see `git log -- lean/Matcher`.

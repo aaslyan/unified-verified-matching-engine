@@ -79,4 +79,16 @@ theorem writeLevel_frame {s : S} {l : LevelH} {row : LevelRow}
   exact ⟨rfl, rfl, rfl, rfl, fun x => by rw [← hpost]; exact hvo x,
     fun x => by rw [← hpost]; exact hvl x, count_writeLevel s l row, levelsUsed_writeLevel s l row⟩
 
+/-- **The empty store.** `init` holds no row: no order or level handle is
+    valid, both pool counts are 0, and no queue, hash or tree has an entry.
+    Phase 4's trace corollary starts here. -/
+theorem init_empty :
+    (∀ h, ¬ (view (init : S)).validO h) ∧ (∀ l, ¬ (view (init : S)).validL l) ∧
+    count (init : S) = 0 ∧ levelsUsed (init : S) = 0 ∧
+    (view (init : S)).hash = [] ∧ (∀ t, (view (init : S)).tree t = []) ∧
+    (∀ l, (view (init : S)).queue l = []) := by
+  rw [init_view]
+  refine ⟨fun h => by simp [Db.orderLive, Db.empty], fun l => by simp [Db.levelLive, Db.empty],
+    init_count, init_levelsUsed, rfl, fun _ => rfl, fun _ => rfl⟩
+
 end EngineDbApi

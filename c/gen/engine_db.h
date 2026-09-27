@@ -29,6 +29,17 @@
 typedef struct ME_OrderRec *ME_OrderH;
 typedef struct ME_LevelRec *ME_LevelH;
 
+/* Pool capacity (the same value bounds both pools) and live order count.
+   Loop bounds and the trade-buffer bound in the matcher are computed from
+   ME_capacity(), the same quantity the Lean semantics uses. */
+uint64_t ME_capacity(void);
+uint64_t ME_order_count(void);
+
+/* Trade sink: the matcher reports each trade here, at most ME_capacity() + 1
+   per call, after ME_trade_reset() at the start of each call. */
+void ME_trade_reset(void);
+void ME_trade_emit(uint64_t maker_id, uint64_t taker_id, uint64_t price, uint64_t qty);
+
 /* Pools: NULL exactly when the pool is at capacity; the store is then unchanged. */
 ME_OrderH ME_order_alloc(void);
 void      ME_order_free(ME_OrderH o);   /* o must be in no queue and not hashed */

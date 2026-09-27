@@ -18,8 +18,8 @@ struct PriceLevel;
 typedef struct Order {
     uint64_t            id;
     uint64_t            account_id;
-    uint8_t             side;           // 0 = Buy, 1 = Sell
-    uint8_t             stp_mode;       // STP policy
+    uint64_t            side;           // 0 = Buy, 1 = Sell (widened: plan v2 integer rule)
+    uint64_t            stp_mode;       // STP policy (widened: plan v2 integer rule)
     uint64_t            price;
     uint64_t            qty;
     uint64_t            remaining_qty;

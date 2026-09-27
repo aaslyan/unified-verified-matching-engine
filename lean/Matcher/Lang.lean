@@ -84,7 +84,7 @@ inductive UnOp where
   deriving DecidableEq, Repr
 
 inductive BinOp where
-  | add | sub | mul
+  | add | sub | mul | div
   | eq | ne | lt | le
   | and | or
   deriving DecidableEq, Repr
@@ -104,6 +104,18 @@ inductive Expr where
   | getO    : Expr → OField → Expr
   /-- Read a field through a level handle. -/
   | getL    : Expr → LField → Expr
+  /-- The store's pool capacity (`EngineDb.capacity`). -/
+  | capacity : Expr
+  /-- The store's live order count (`EngineDb.count`). -/
+  | count   : Expr
+  deriving Repr, Inhabited
+
+/-- A loop or buffer bound: a literal, or the store's capacity plus a literal.
+    Both semantics read the same quantity: the Lean store's `capacity`, and in
+    C the data layer's `ME_capacity()`. -/
+inductive Bound where
+  | lit    : Nat → Bound
+  | capPlus : Nat → Bound
   deriving Repr, Inhabited
 
 /-- The extern operations: exactly the EngineDb contract. -/
@@ -126,9 +138,9 @@ inductive Stmt where
   | seq    : Stmt → Stmt → Stmt
   | assign : Ident → Expr → Stmt
   | ite    : Expr → Stmt → Stmt → Stmt
-  /-- `while (cond)`, at most `n` iterations; still running at the bound is
-      an error. The only loop. -/
-  | loop   : Nat → Expr → Stmt → Stmt
+  /-- `while (cond)`, at most `bound` iterations; still running at the bound
+      is an error. The only loop. -/
+  | loop   : Bound → Expr → Stmt → Stmt
   /-- Call an EngineDb operation, optionally binding its result. -/
   | ext    : Option Ident → Ext → List Expr → Stmt
   /-- Call a function defined earlier in the program. -/
@@ -156,7 +168,7 @@ structure FunDef where
 structure Program where
   funs     : List FunDef
   /-- Trade-buffer capacity per entry call. -/
-  tradeCap : Nat
+  tradeCap : Bound
   deriving Repr
 
 inductive Err where
@@ -204,10 +216,15 @@ def subU (a b : UInt64) : Except Err UInt64 :=
 def mulU (a b : UInt64) : Except Err UInt64 :=
   if a.toNat * b.toNat < 2 ^ 64 then .ok (a * b) else .error .overflow
 
+/-- Unsigned division; a zero divisor is an error. -/
+def divU (a b : UInt64) : Except Err UInt64 :=
+  if b = 0 then .error .overflow else .ok (a / b)
+
 def evalBin : BinOp → Val → Val → Except Err Val
   | .add, .u64 a, .u64 b => .u64 <$> addU a b
   | .sub, .u64 a, .u64 b => .u64 <$> subU a b
   | .mul, .u64 a, .u64 b => .u64 <$> mulU a b
+  | .div, .u64 a, .u64 b => .u64 <$> divU a b
   | .eq, .u64 a, .u64 b => .ok (.bool (a == b))
   | .ne, .u64 a, .u64 b => .ok (.bool (a != b))
   | .lt, .u64 a, .u64 b => .ok (.bool (a < b))
@@ -216,10 +233,6 @@ def evalBin : BinOp → Val → Val → Except Err Val
   | .ne, .code a, .code b => .ok (.bool (a != b))
   | .eq, .bool a, .bool b => .ok (.bool (a == b))
   | .ne, .bool a, .bool b => .ok (.bool (a != b))
-  | .eq, .order a, .order b => .ok (.bool (a == b))
-  | .ne, .order a, .order b => .ok (.bool (a != b))
-  | .eq, .level a, .level b => .ok (.bool (a == b))
-  | .ne, .level a, .level b => .ok (.bool (a != b))
   | .and, .bool a, .bool b => .ok (.bool (a && b))
   | .or, .bool a, .bool b => .ok (.bool (a || b))
   | _, _, _ => .error .type
@@ -296,6 +309,14 @@ def evalExpr (st : St S) : Expr → Except Err Val
   | .un .not e => do
     let b ← asBool (← evalExpr st e)
     .ok (.bool (!b))
+  -- `&&` and `||` short-circuit, as in C: the right operand is not evaluated
+  -- (and cannot fail) when the left one decides the result.
+  | .bin .and a b => do
+    if (← asBool (← evalExpr st a)) then .bool <$> asBool (← evalExpr st b)
+    else .ok (.bool false)
+  | .bin .or a b => do
+    if (← asBool (← evalExpr st a)) then .ok (.bool true)
+    else .bool <$> asBool (← evalExpr st b)
   | .bin op a b => do
     let va ← evalExpr st a
     let vb ← evalExpr st b
@@ -315,6 +336,12 @@ def evalExpr (st : St S) : Expr → Except Err Val
     match EngineDb.readOrder st.store h with
     | some r => .ok (getOField r f)
     | none => .error .invalidHandle
+  | .capacity =>
+    let c := EngineDb.capacity (S := S)
+    if c < 2 ^ 64 then .ok (.u64 c.toUInt64) else .error .overflow
+  | .count =>
+    let c := EngineDb.count st.store
+    if c < 2 ^ 64 then .ok (.u64 c.toUInt64) else .error .overflow
   | .getL e f => do
     let l ← liveLevel st (← evalExpr st e)
     match f with
@@ -427,6 +454,15 @@ def lookupFun (P : Program) (f : Ident) : Except Err FunDef :=
   | some fd => .ok fd
   | none => .error .noFun
 
+/-- The value of a bound; `overflow` if it does not fit `uint64_t`, which is
+    where the printed `me_add(ME_capacity(), k)` traps. -/
+def boundVal (b : Bound) : Except Err Nat :=
+  match b with
+  | .lit n => if n < 2 ^ 64 then .ok n else .error .overflow
+  | .capPlus k =>
+    let n := EngineDb.capacity (S := S) + k
+    if n < 2 ^ 64 then .ok n else .error .overflow
+
 def toNatTrade (m t p q : UInt64) : ProcessB.TradeObs :=
   { makerId := m.toNat, takerId := t.toNat, price := p.toNat, qty := q.toNat }
 
@@ -450,7 +486,8 @@ def execStmt (P : Program) : Nat → Stmt → St S → Except Err (St S × Outco
     | .ite c a b => do
       let cb ← asBool (← evalExpr st c)
       if cb then execStmt P f a st else execStmt P f b st
-    | .loop n c body =>
+    | .loop bnd c body => do
+      let n ← boundVal (S := S) bnd
       let r := (List.range n).foldl
         (fun (acc : Except Err (St S × Outcome × Bool)) _ =>
           match acc with
@@ -498,7 +535,8 @@ def execStmt (P : Program) : Nat → Stmt → St S → Except Err (St S × Outco
       let vt ← asU64 (← evalExpr st t)
       let vp ← asU64 (← evalExpr st p)
       let vq ← asU64 (← evalExpr st q)
-      if st.trades.length < P.tradeCap then
+      let cap ← boundVal (S := S) P.tradeCap
+      if st.trades.length < cap then
         .ok ({ st with trades := st.trades ++ [toNatTrade vm vt vp vq] }, .normal)
       else .error .tradeBuffer
     | .ret e => do

@@ -60,6 +60,7 @@ def expr : Expr → String
     | .add => s!"me_add({expr a}, {expr b})"
     | .sub => s!"me_sub({expr a}, {expr b})"
     | .mul => s!"me_mul({expr a}, {expr b})"
+    | .div => s!"me_div({expr a}, {expr b})"
     | .eq => s!"({expr a} == {expr b})"
     | .ne => s!"({expr a} != {expr b})"
     | .lt => s!"({expr a} < {expr b})"
@@ -72,8 +73,15 @@ def expr : Expr → String
   | .isNullL e => s!"({expr e} == NULL)"
   | .getO e f => s!"ME_order_get_{oField f}({expr e})"
   | .getL e f => s!"ME_level_get_{lField f}({expr e})"
+  | .capacity => "ME_capacity()"
+  | .count => "ME_order_count()"
 
 def args (es : List Expr) : String := ", ".intercalate (es.map expr)
+
+/-- A bound as C: the same quantity the semantics uses (`boundVal`). -/
+def bound : Bound → String
+  | .lit n => s!"UINT64_C({n})"
+  | .capPlus k => s!"me_add(ME_capacity(), UINT64_C({k}))"
 
 /-- The C call of an extern operation, or `none` for a malformed one, which
     the semantics rejects (`arity`/`type`) and the printer turns into a trap. -/
@@ -114,11 +122,12 @@ def stmt (ind depth : Nat) : Stmt → String
   | .ite c a b =>
     s!"{pad ind}if ((bool){expr c}) \{\n" ++ stmt (ind + 1) depth a ++
     s!"{pad ind}} else \{\n" ++ stmt (ind + 1) depth b ++ s!"{pad ind}}\n"
-  | .loop n c body =>
+  | .loop bnd c body =>
     let k := s!"me_k{depth}"
-    s!"{pad ind}for (uint64_t {k} = UINT64_C(0);; {k} = {k} + UINT64_C(1)) \{\n" ++
+    let n := s!"me_n{depth}"
+    s!"{pad ind}for (uint64_t {k} = UINT64_C(0), {n} = {bound bnd};; {k} = {k} + UINT64_C(1)) \{\n" ++
     s!"{pad (ind + 1)}if (!{expr c}) break;\n" ++
-    s!"{pad (ind + 1)}if ({k} == UINT64_C({n})) me_trap();\n" ++
+    s!"{pad (ind + 1)}if ({k} == {n}) me_trap();\n" ++
     stmt (ind + 1) (depth + 1) body ++ s!"{pad ind}}\n"
   | .ext dst op es =>
     match extCall op es, dst with
@@ -138,27 +147,26 @@ def funDef (fd : FunDef) : String :=
   let ps := if fd.params.isEmpty then "void" else ", ".intercalate (fd.params.map decl)
   let locals := String.join (fd.locals.map fun (x, t) => s!"  {cTy t} {x} = {cDefault t};\n")
   let voids := String.join ((fd.params ++ fd.locals).map fun (x, _) => s!"  (void){x};\n")
-  let reset := if fd.entry then "  me_ntrades = UINT64_C(0);\n" else ""
+  let reset := if fd.entry then "  me_ntrades = UINT64_C(0);\n  ME_trade_reset();\n" else ""
   s!"{cTy fd.ret} {fd.name}({ps}) \{\n" ++ locals ++ voids ++ reset ++
     stmt 1 0 fd.body ++ "  me_trap();\n}\n"
 
-def preamble (tradeCap : Nat) : String :=
+def preamble (tradeCap : Bound) : String :=
   "/* Generated from lean/Matcher by Matcher.Print.program. Do not edit. */\n" ++
   "#include \"engine_db.h\"\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdlib.h>\n\n" ++
-  s!"#define ME_TRADE_CAP UINT64_C({max tradeCap 1})\n\n" ++
-  "typedef struct { uint64_t maker; uint64_t taker; uint64_t price; uint64_t qty; } ME_Trade;\n" ++
-  "ME_Trade me_trades[ME_TRADE_CAP];\nuint64_t me_ntrades;\n\n" ++
+  "static uint64_t me_ntrades;\n\n" ++
   "_Noreturn static inline void me_trap(void) { abort(); }\n" ++
-  "static inline uint64_t me_add(uint64_t a, uint64_t b) {\n" ++
+  "static inline __attribute__((unused)) uint64_t me_add(uint64_t a, uint64_t b) {\n" ++
   "  uint64_t r;\n  if (__builtin_add_overflow(a, b, &r)) me_trap();\n  return r;\n}\n" ++
-  "static inline uint64_t me_sub(uint64_t a, uint64_t b) {\n" ++
+  "static inline __attribute__((unused)) uint64_t me_sub(uint64_t a, uint64_t b) {\n" ++
   "  uint64_t r;\n  if (__builtin_sub_overflow(a, b, &r)) me_trap();\n  return r;\n}\n" ++
-  "static inline uint64_t me_mul(uint64_t a, uint64_t b) {\n" ++
+  "static inline __attribute__((unused)) uint64_t me_mul(uint64_t a, uint64_t b) {\n" ++
   "  uint64_t r;\n  if (__builtin_mul_overflow(a, b, &r)) me_trap();\n  return r;\n}\n" ++
-  "static inline void me_emit(uint64_t m, uint64_t t, uint64_t p, uint64_t q) {\n" ++
-  "  if (me_ntrades >= ME_TRADE_CAP) me_trap();\n" ++
-  "  me_trades[me_ntrades].maker = m;\n  me_trades[me_ntrades].taker = t;\n" ++
-  "  me_trades[me_ntrades].price = p;\n  me_trades[me_ntrades].qty = q;\n" ++
+  "static inline __attribute__((unused)) uint64_t me_div(uint64_t a, uint64_t b) {\n" ++
+  "  if (b == UINT64_C(0)) me_trap();\n  return a / b;\n}\n" ++
+  "static inline __attribute__((unused)) void me_emit(uint64_t m, uint64_t t, uint64_t p, uint64_t q) {\n" ++
+  s!"  if (me_ntrades >= {bound tradeCap}) me_trap();\n" ++
+  "  ME_trade_emit(m, t, p, q);\n" ++
   "  me_ntrades = me_ntrades + UINT64_C(1);\n}\n\n"
 
 def program (P : Program) : String :=
