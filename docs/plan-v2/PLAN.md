@@ -105,3 +105,9 @@ Not started here; recorded so the composition is explicit. Prove the EngineDb la
 • Is 14M orders/s a requirement for the generated engine, or is the handwritten engine the performance baseline only? Affects Phase 6 choices, nothing in the proof.
 • Do the TLA+ model and the April paper get re-synced after the spec adopted C's STP rule?
 • Atree = AVL, and typed-field vs byte-level memory in CSubset — both Phase 6 questions now; moot for the matcher fragment.
+
+---
+Decisions after Phase 0 (2026-09-27), recorded in docs/plan-v2/INVENTORY.md:
+• Decision 1: spec-only request types (FOK, DAY, stops, market-to-limit, iceberg, minimum quantity, amend) stay out of the generated matcher. Exclusion is a rejection at entry (RejectedUnsupported, store unchanged), not an input assumption; the theorem quantifies over all requests. Amend/replace is out, so its capacity rule is closed.
+• Decision 2: Phase 2 builds a separate memory-free language in this repository instead of extending CSubset. "CSubset semantics" for the matcher (§2, §3, §7) means this language's semantics. Linking it to CSubset is a Phase 6 obligation.
+• §7 claim wording, supported requests: the claim covers LIMIT (GTC), MARKET (IOC), IOC limit, POST_ONLY and cancel, with STP modes NONE, CANCEL_NEW, CANCEL_OLD, CANCEL_BOTH and DECREMENT; every other request is rejected unchanged, and that rejection is itself covered by the theorem.

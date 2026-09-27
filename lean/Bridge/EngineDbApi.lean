@@ -83,6 +83,10 @@ structure Db where
   queue  : LevelH → List OrderH
   hash   : List OrderH
   tree   : Tree → List LevelH
+  /-- The live order handles, as a finite list (pool usage). -/
+  oLive  : List OrderH
+  /-- The live level handles, as a finite list (pool usage). -/
+  lLive  : List LevelH
 
 def upd {α β : Type} [DecidableEq α] (f : α → β) (a : α) (b : β) : α → β :=
   fun x => if x = a then b else f x
@@ -95,7 +99,7 @@ def upd {α β : Type} [DecidableEq α] (f : α → β) (a : α) (b : β) : α �
 
 def Db.empty : Db :=
   { orders := fun _ => none, levels := fun _ => none, queue := fun _ => [],
-    hash := [], tree := fun _ => [] }
+    hash := [], tree := fun _ => [], oLive := [], lLive := [] }
 
 def Db.orderLive (db : Db) (h : OrderH) : Prop := (db.orders h).isSome
 def Db.levelLive (db : Db) (l : LevelH) : Prop := (db.levels l).isSome
@@ -130,6 +134,16 @@ structure Db.WF (db : Db) : Prop where
   tree_disjoint : ∀ l, l ∈ db.tree .bids → l ∈ db.tree .asks → False
   tree_prices  : ∀ t, ∀ l₁ ∈ db.tree t, ∀ l₂ ∈ db.tree t,
                    db.levelPrice l₁ = db.levelPrice l₂ → l₁ = l₂
+  orders_live  : ∀ h, db.orderLive h ↔ h ∈ db.oLive
+  oLive_nodup  : db.oLive.Nodup
+  levels_live  : ∀ l, db.levelLive l ↔ l ∈ db.lLive
+  lLive_nodup  : db.lLive.Nodup
+
+/-- Order pool usage: the number of live order rows (`order_pool_n`). -/
+def Db.count (db : Db) : Nat := db.oLive.length
+
+/-- Level pool usage: the number of live level rows (`level_pool_n`). -/
+def Db.levelUsed (db : Db) : Nat := db.lLive.length
 
 -- ============================================================================
 -- Pools (Tpool): `EngineDb_order_pool_Alloc/Free`, `EngineDb_level_pool_Alloc/Free`
@@ -141,28 +155,28 @@ def orderAlloc.post (db : Db) (r : Option OrderH) (db' : Db) : Prop :=
   match r with
   | none   => db' = db
   | some h => db.orders h = none ∧
-      ∃ row, db' = { db with orders := upd db.orders h (some row) }
+      ∃ row, db' = { db with orders := upd db.orders h (some row), oLive := h :: db.oLive }
 
 /-- `EngineDb_order_pool_Free`: the row must be unlinked from every index. -/
 def orderFree.pre (db : Db) (h : OrderH) : Prop :=
   db.orderLive h ∧ ¬ db.queued h ∧ h ∉ db.hash
 
 def orderFree.post (db : Db) (h : OrderH) (db' : Db) : Prop :=
-  db' = { db with orders := upd db.orders h none }
+  db' = { db with orders := upd db.orders h none, oLive := db.oLive.erase h }
 
 /-- `EngineDb_level_pool_Alloc`. -/
 def levelAlloc.post (db : Db) (r : Option LevelH) (db' : Db) : Prop :=
   match r with
   | none   => db' = db
   | some l => db.levels l = none ∧
-      ∃ row, db' = { db with levels := upd db.levels l (some row) }
+      ∃ row, db' = { db with levels := upd db.levels l (some row), lLive := l :: db.lLive }
 
 /-- `EngineDb_level_pool_Free`: the level must be out of both trees and empty. -/
 def levelFree.pre (db : Db) (l : LevelH) : Prop :=
   db.levelLive l ∧ l ∉ db.tree .bids ∧ l ∉ db.tree .asks ∧ db.queue l = []
 
 def levelFree.post (db : Db) (l : LevelH) (db' : Db) : Prop :=
-  db' = { db with levels := upd db.levels l none }
+  db' = { db with levels := upd db.levels l none, lLive := db.lLive.erase l }
 
 -- ============================================================================
 -- Field access through a handle (`ord->remaining_qty`, `lvl->price`, ...)
@@ -297,5 +311,80 @@ def tBest.post (db : Db) (t : Tree) (r : Option LevelH) : Prop :=
   match r with
   | none   => db.tree t = []
   | some l => l ∈ db.tree t ∧ ∀ l' ∈ db.tree t, better t (db.levelPrice l) (db.levelPrice l')
+
+-- ============================================================================
+-- The store as a parameter (plan v2 §2, §4)
+-- ============================================================================
+
+/-- A storage layer for the matcher: the operations as functions, a view onto
+    the abstract store `Db`, and laws stating that each operation, called
+    within its precondition on a well-formed store, meets its contract.
+
+    `capacity` bounds each pool. Allocation fails exactly when the pool is
+    full, and then leaves the store unchanged (§4 "Capacity"). A matcher
+    verified against this class knows nothing else about memory. -/
+class EngineDb (S : Type) where
+  capacity : Nat
+  view : S → Db
+  init : S
+  orderAlloc : S → Option OrderH × S
+  orderFree : S → OrderH → S
+  levelAlloc : S → Option LevelH × S
+  levelFree : S → LevelH → S
+  readOrder : S → OrderH → Option OrderRow
+  writeOrder : S → OrderH → OrderRow → S
+  readLevel : S → LevelH → Option LevelRow
+  writeLevel : S → LevelH → LevelRow → S
+  levelCount : S → LevelH → Nat
+  owner : S → OrderH → Option LevelH
+  hashFind : S → UInt64 → Option OrderH
+  hashInsert : S → OrderH → Bool × S
+  hashRemove : S → OrderH → S
+  qInsertTail : S → LevelH → OrderH → S
+  qRemove : S → LevelH → OrderH → S
+  qFirst : S → LevelH → Option OrderH
+  qNext : S → OrderH → Option OrderH
+  tFind : S → Tree → UInt64 → Option LevelH
+  tInsert : S → Tree → LevelH → S
+  tRemove : S → Tree → LevelH → S
+  tBest : S → Tree → Option LevelH
+  init_view : view init = Db.empty
+  orderAlloc_law : ∀ s, (view s).WF →
+    EngineDbApi.orderAlloc.post (view s) (orderAlloc s).1 (view (orderAlloc s).2) ∧
+    ((orderAlloc s).1 = none ↔ capacity ≤ (view s).count)
+  orderFree_law : ∀ s h, (view s).WF → EngineDbApi.orderFree.pre (view s) h →
+    EngineDbApi.orderFree.post (view s) h (view (orderFree s h))
+  levelAlloc_law : ∀ s, (view s).WF →
+    EngineDbApi.levelAlloc.post (view s) (levelAlloc s).1 (view (levelAlloc s).2) ∧
+    ((levelAlloc s).1 = none ↔ capacity ≤ (view s).levelUsed)
+  levelFree_law : ∀ s l, (view s).WF → EngineDbApi.levelFree.pre (view s) l →
+    EngineDbApi.levelFree.post (view s) l (view (levelFree s l))
+  readOrder_law : ∀ s h, readOrder s h = (view s).orders h
+  writeOrder_law : ∀ s h row, (view s).WF → EngineDbApi.writeOrder.pre (view s) h row →
+    EngineDbApi.writeOrder.post (view s) h row (view (writeOrder s h row))
+  readLevel_law : ∀ s l, readLevel s l = (view s).levels l
+  writeLevel_law : ∀ s l row, (view s).WF → EngineDbApi.writeLevel.pre (view s) l row →
+    EngineDbApi.writeLevel.post (view s) l row (view (writeLevel s l row))
+  levelCount_law : ∀ s l, levelCount s l = EngineDbApi.levelCount (view s) l
+  owner_law : ∀ s h, (view s).WF → EngineDbApi.owner.post (view s) h (owner s h)
+  hashFind_law : ∀ s id, (view s).WF → EngineDbApi.hashFind.post (view s) id (hashFind s id)
+  hashInsert_law : ∀ s h, (view s).WF → EngineDbApi.hashInsert.pre (view s) h →
+    EngineDbApi.hashInsert.post (view s) h (hashInsert s h).1 (view (hashInsert s h).2)
+  hashRemove_law : ∀ s h, (view s).WF → EngineDbApi.hashRemove.pre (view s) h →
+    EngineDbApi.hashRemove.post (view s) h (view (hashRemove s h))
+  qInsertTail_law : ∀ s l h, (view s).WF → EngineDbApi.qInsertTail.pre (view s) l h →
+    EngineDbApi.qInsertTail.post (view s) l h (view (qInsertTail s l h))
+  qRemove_law : ∀ s l h, (view s).WF → EngineDbApi.qRemove.pre (view s) l h →
+    EngineDbApi.qRemove.post (view s) l h (view (qRemove s l h))
+  qFirst_law : ∀ s l, (view s).WF → EngineDbApi.qFirst.pre (view s) l →
+    EngineDbApi.qFirst.post (view s) l (qFirst s l)
+  qNext_law : ∀ s h, (view s).WF → EngineDbApi.qNext.pre (view s) h →
+    EngineDbApi.qNext.post (view s) h (qNext s h)
+  tFind_law : ∀ s t p, (view s).WF → EngineDbApi.tFind.post (view s) t p (tFind s t p)
+  tInsert_law : ∀ s t l, (view s).WF → EngineDbApi.tInsert.pre (view s) t l →
+    EngineDbApi.tInsert.post (view s) t l (view (tInsert s t l))
+  tRemove_law : ∀ s t l, (view s).WF → EngineDbApi.tRemove.pre (view s) t l →
+    EngineDbApi.tRemove.post (view s) t l (view (tRemove s t l))
+  tBest_law : ∀ s t, (view s).WF → EngineDbApi.tBest.post (view s) t (tBest s t)
 
 end EngineDbApi

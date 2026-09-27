@@ -28,6 +28,10 @@ theorem WF_empty : Db.empty.WF where
   tree_nodup := by intro t; exact List.nodup_nil
   tree_disjoint := by intro l hl; cases hl
   tree_prices := by intro t l₁ hl; cases hl
+  orders_live := by intro h; simp [Db.orderLive, Db.empty]
+  oLive_nodup := List.nodup_nil
+  levels_live := by intro l; simp [Db.levelLive, Db.empty]
+  lLive_nodup := List.nodup_nil
 
 -- ============================================================================
 -- Determinism of lookups
@@ -154,6 +158,30 @@ section Preservation
 
 variable {db db' : Db}
 
+private theorem live_alloc {α β : Type} [DecidableEq α] {f : α → Option β} {L : List α}
+    (hf : ∀ x, (f x).isSome = true ↔ x ∈ L) (h : α) (v : β) :
+    ∀ x, (upd f h (some v) x).isSome = true ↔ x ∈ h :: L := by
+  intro x
+  by_cases he : x = h
+  · subst he; simp
+  · rw [upd_other _ _ he, hf x]; simp [he]
+
+private theorem live_write {α β : Type} [DecidableEq α] {f : α → Option β} {L : List α}
+    (hf : ∀ x, (f x).isSome = true ↔ x ∈ L) {h : α} (hh : h ∈ L) (v : β) :
+    ∀ x, (upd f h (some v) x).isSome = true ↔ x ∈ L := by
+  intro x
+  by_cases he : x = h
+  · subst he; simp [hh]
+  · rw [upd_other _ _ he, hf x]
+
+private theorem live_free {α β : Type} [DecidableEq α] {f : α → Option β} {L : List α}
+    (hf : ∀ x, (f x).isSome = true ↔ x ∈ L) (hn : L.Nodup) (h : α) :
+    ∀ x, (upd f h none x).isSome = true ↔ x ∈ L.erase h := by
+  intro x
+  by_cases he : x = h
+  · subst he; simp [hn.not_mem_erase]
+  · rw [upd_other _ _ he, hf x, List.mem_erase_of_ne he]
+
 private theorem orderId_upd_other (db : Db) {h x : OrderH} (r : Option OrderRow) (hx : x ≠ h) :
     Db.orderId { db with orders := upd db.orders h r } x = db.orderId x := by
   simp [Db.orderId, upd_other _ _ hx]
@@ -170,13 +198,13 @@ private theorem levelLive_upd_other (db : Db) {l x : LevelH} (r : Option LevelRo
     Db.levelLive { db with levels := upd db.levels l r } x = db.levelLive x := by
   simp [Db.levelLive, upd_other _ _ hx]
 
-private theorem mapTotal_isSome (db : Db) (l x : LevelH) (f : UInt64 → UInt64) :
+theorem mapTotal_isSome (db : Db) (l x : LevelH) (f : UInt64 → UInt64) :
     (db.mapTotal l f x).isSome = (db.levels x).isSome := by
   by_cases he : x = l
   · subst he; cases hl : db.levels x <;> simp [Db.mapTotal, hl]
   · simp [Db.mapTotal, upd_other _ _ he]
 
-private theorem mapTotal_priceOf (db : Db) (l x : LevelH) (f : UInt64 → UInt64) :
+theorem mapTotal_priceOf (db : Db) (l x : LevelH) (f : UInt64 → UInt64) :
     (db.mapTotal l f x).map LevelRow.price = (db.levels x).map LevelRow.price := by
   by_cases he : x = l
   · subst he; cases hl : db.levels x <;> simp [Db.mapTotal, hl]
@@ -190,17 +218,22 @@ theorem orderAlloc_preserves_WF {r : Option OrderH}
     obtain ⟨hdead, row, rfl⟩ := hpost
     have hnot : ∀ x, db.orderLive x → x ≠ h := by
       intro x hx he; subst he; simp [Db.orderLive, hdead] at hx
-    refine { hw with queue_live := ?_, hash_live := ?_, hash_ids := ?_ }
+    refine { hw with
+    queue_live := ?_, hash_live := ?_, hash_ids := ?_, orders_live := ?_, oLive_nodup := ?_ }
     · intro l x hx
       have := hw.queue_live l x hx
-      exact ⟨by rw [orderLive_upd_other _ _ (hnot x this.1)]; exact this.1, this.2⟩
+      exact ⟨by simp only [Db.orderLive, upd_other _ _ (hnot x this.1)]; exact this.1, this.2⟩
     · intro x hx
       have := hw.hash_live x hx
-      rw [orderLive_upd_other _ _ (hnot x this)]; exact this
+      simp only [Db.orderLive, upd_other _ _ (hnot x this)]; exact this
     · intro x₁ h₁ x₂ h₂ he
-      rw [orderId_upd_other _ _ (hnot _ (hw.hash_live _ h₁)),
-        orderId_upd_other _ _ (hnot _ (hw.hash_live _ h₂))] at he
+      simp only [Db.orderId, upd_other _ _ (hnot _ (hw.hash_live _ h₁)),
+        upd_other _ _ (hnot _ (hw.hash_live _ h₂))] at he
       exact hw.hash_ids _ h₁ _ h₂ he
+    · exact live_alloc hw.orders_live h row
+    · refine List.nodup_cons.mpr ⟨fun hm => ?_, hw.oLive_nodup⟩
+      have := (hw.orders_live h).mpr hm
+      simp [Db.orderLive, hdead] at this
 
 theorem orderFree_preserves_WF {h : OrderH}
     (hw : db.WF) (hpre : orderFree.pre db h) (hpost : orderFree.post db h db') : db'.WF := by
@@ -208,15 +241,18 @@ theorem orderFree_preserves_WF {h : OrderH}
   obtain ⟨-, hnq, hnh⟩ := hpre
   have hq : ∀ l x, x ∈ db.queue l → x ≠ h := fun l x hx he => hnq ⟨l, he ▸ hx⟩
   have hh : ∀ x ∈ db.hash, x ≠ h := fun x hx he => hnh (he ▸ hx)
-  refine { hw with queue_live := ?_, hash_live := ?_, hash_ids := ?_ }
+  refine { hw with
+    queue_live := ?_, hash_live := ?_, hash_ids := ?_, orders_live := ?_, oLive_nodup := ?_ }
   · intro l x hx
     have := hw.queue_live l x hx
-    exact ⟨by rw [orderLive_upd_other _ _ (hq l x hx)]; exact this.1, this.2⟩
+    exact ⟨by simp only [Db.orderLive, upd_other _ _ (hq l x hx)]; exact this.1, this.2⟩
   · intro x hx
-    rw [orderLive_upd_other _ _ (hh x hx)]; exact hw.hash_live x hx
+    simp only [Db.orderLive, upd_other _ _ (hh x hx)]; exact hw.hash_live x hx
   · intro x₁ h₁ x₂ h₂ he
-    rw [orderId_upd_other _ _ (hh _ h₁), orderId_upd_other _ _ (hh _ h₂)] at he
+    simp only [Db.orderId, upd_other _ _ (hh _ h₁), upd_other _ _ (hh _ h₂)] at he
     exact hw.hash_ids _ h₁ _ h₂ he
+  · exact live_free hw.orders_live hw.oLive_nodup h
+  · exact hw.oLive_nodup.erase h
 
 theorem levelAlloc_preserves_WF {r : Option LevelH}
     (hw : db.WF) (hpost : levelAlloc.post db r db') : db'.WF := by
@@ -226,17 +262,22 @@ theorem levelAlloc_preserves_WF {r : Option LevelH}
     obtain ⟨hdead, row, rfl⟩ := hpost
     have hnot : ∀ x, db.levelLive x → x ≠ l := by
       intro x hx he; subst he; simp [Db.levelLive, hdead] at hx
-    refine { hw with queue_live := ?_, tree_live := ?_, tree_prices := ?_ }
+    refine { hw with
+    queue_live := ?_, tree_live := ?_, tree_prices := ?_, levels_live := ?_, lLive_nodup := ?_ }
     · intro l' x hx
       have := hw.queue_live l' x hx
-      exact ⟨this.1, by rw [levelLive_upd_other _ _ (hnot l' this.2)]; exact this.2⟩
+      exact ⟨this.1, by simp only [Db.levelLive, upd_other _ _ (hnot l' this.2)]; exact this.2⟩
     · intro t x hx
-      rw [levelLive_upd_other _ _ (hnot x (hw.tree_live t x hx))]
+      simp only [Db.levelLive, upd_other _ _ (hnot x (hw.tree_live t x hx))]
       exact hw.tree_live t x hx
     · intro t x₁ h₁ x₂ h₂ he
-      rw [levelPrice_upd_other _ _ (hnot _ (hw.tree_live t _ h₁)),
-        levelPrice_upd_other _ _ (hnot _ (hw.tree_live t _ h₂))] at he
+      simp only [Db.levelPrice, upd_other _ _ (hnot _ (hw.tree_live t _ h₁)),
+        upd_other _ _ (hnot _ (hw.tree_live t _ h₂))] at he
       exact hw.tree_prices t _ h₁ _ h₂ he
+    · exact live_alloc hw.levels_live l row
+    · refine List.nodup_cons.mpr ⟨fun hm => ?_, hw.lLive_nodup⟩
+      have := (hw.levels_live l).mpr hm
+      simp [Db.levelLive, hdead] at this
 
 theorem levelFree_preserves_WF {l : LevelH}
     (hw : db.WF) (hpre : levelFree.pre db l) (hpost : levelFree.post db l db') : db'.WF := by
@@ -246,16 +287,19 @@ theorem levelFree_preserves_WF {l : LevelH}
     intro t x hx he; subst he; cases t
     · exact hnb hx
     · exact hna hx
-  refine { hw with queue_live := ?_, tree_live := ?_, tree_prices := ?_ }
+  refine { hw with
+    queue_live := ?_, tree_live := ?_, tree_prices := ?_, levels_live := ?_, lLive_nodup := ?_ }
   · intro l' x hx
     have := hw.queue_live l' x hx
     have hne : l' ≠ l := by intro he; subst he; rw [hempty] at hx; cases hx
-    exact ⟨this.1, by rw [levelLive_upd_other _ _ hne]; exact this.2⟩
+    exact ⟨this.1, by simp only [Db.levelLive, upd_other _ _ hne]; exact this.2⟩
   · intro t x hx
-    rw [levelLive_upd_other _ _ (ht t x hx)]; exact hw.tree_live t x hx
+    simp only [Db.levelLive, upd_other _ _ (ht t x hx)]; exact hw.tree_live t x hx
   · intro t x₁ h₁ x₂ h₂ he
-    rw [levelPrice_upd_other _ _ (ht t _ h₁), levelPrice_upd_other _ _ (ht t _ h₂)] at he
+    simp only [Db.levelPrice, upd_other _ _ (ht t _ h₁), upd_other _ _ (ht t _ h₂)] at he
     exact hw.tree_prices t _ h₁ _ h₂ he
+  · exact live_free hw.levels_live hw.lLive_nodup l
+  · exact hw.lLive_nodup.erase l
 
 theorem writeOrder_preserves_WF {h : OrderH} {row : OrderRow}
     (hw : db.WF) (hpre : writeOrder.pre db h row) (hpost : writeOrder.post db h row db') :
@@ -273,8 +317,8 @@ theorem writeOrder_preserves_WF {h : OrderH} {row : OrderRow}
     intro x hx
     by_cases he : x = h
     · subst he; simp [Db.orderLive]
-    · rw [orderLive_upd_other _ _ he]; exact hx
-  refine { hw with queue_live := ?_, hash_live := ?_, hash_ids := ?_ }
+    · simp only [Db.orderLive, upd_other _ _ he]; exact hx
+  refine { hw with queue_live := ?_, hash_live := ?_, hash_ids := ?_, orders_live := ?_ }
   · intro l x hx
     have := hw.queue_live l x hx
     exact ⟨hlive x this.1, this.2⟩
@@ -282,6 +326,7 @@ theorem writeOrder_preserves_WF {h : OrderH} {row : OrderRow}
   · intro x₁ h₁ x₂ h₂ he
     rw [hid _ h₁, hid _ h₂] at he
     exact hw.hash_ids _ h₁ _ h₂ he
+  · exact live_write hw.orders_live ((hw.orders_live h).mp (by simp [Db.orderLive, hold])) row
 
 theorem writeLevel_preserves_WF {l : LevelH} {row : LevelRow}
     (hw : db.WF) (hpre : writeLevel.pre db l row) (hpost : writeLevel.post db l row db') :
@@ -301,8 +346,8 @@ theorem writeLevel_preserves_WF {l : LevelH} {row : LevelRow}
     intro x hx
     by_cases he : x = l
     · subst he; simp [Db.levelLive]
-    · rw [levelLive_upd_other _ _ he]; exact hx
-  refine { hw with queue_live := ?_, tree_live := ?_, tree_prices := ?_ }
+    · simp only [Db.levelLive, upd_other _ _ he]; exact hx
+  refine { hw with queue_live := ?_, tree_live := ?_, tree_prices := ?_, levels_live := ?_ }
   · intro l' x hx
     have := hw.queue_live l' x hx
     exact ⟨this.1, hlive l' this.2⟩
@@ -310,6 +355,7 @@ theorem writeLevel_preserves_WF {l : LevelH} {row : LevelRow}
   · intro t x₁ h₁ x₂ h₂ he
     rw [hprice t _ h₁, hprice t _ h₂] at he
     exact hw.tree_prices t _ h₁ _ h₂ he
+  · exact live_write hw.levels_live ((hw.levels_live l).mp (by simp [Db.levelLive, hold])) row
 
 theorem hashInsert_preserves_WF {h : OrderH} {ok : Bool}
     (hw : db.WF) (hpre : hashInsert.pre db h) (hpost : hashInsert.post db h ok db') :
@@ -357,7 +403,8 @@ theorem qInsertTail_preserves_WF {l : LevelH} {h : OrderH}
       · exact Or.inr ⟨rfl, hx⟩
     · rw [upd_other _ _ he] at hx; exact Or.inl hx
   refine { hw with
-    queue_live := ?_, queue_nodup := ?_, queue_unique := ?_, tree_live := ?_, tree_prices := ?_ }
+    queue_live := ?_, queue_nodup := ?_, queue_unique := ?_, tree_live := ?_, tree_prices := ?_,
+    levels_live := ?_ }
   · intro l' x hx
     simp only [Db.levelLive, mapTotal_isSome]
     rcases hmem l' x hx with hx | ⟨rfl, rfl⟩
@@ -383,6 +430,7 @@ theorem qInsertTail_preserves_WF {l : LevelH} {h : OrderH}
   · intro t x₁ h₁ x₂ h₂ he
     simp only [Db.levelPrice, mapTotal_priceOf] at he
     exact hw.tree_prices t _ h₁ _ h₂ he
+  · intro x; simp only [Db.levelLive, mapTotal_isSome]; exact hw.levels_live x
 
 theorem qRemove_preserves_WF {l : LevelH} {h : OrderH}
     (hw : db.WF) (hpost : qRemove.post db l h db') : db'.WF := by
@@ -393,7 +441,8 @@ theorem qRemove_preserves_WF {l : LevelH} {h : OrderH}
     · subst he; simp only [upd_same] at hx; exact List.mem_of_mem_erase hx
     · rw [upd_other _ _ he] at hx; exact hx
   refine { hw with
-    queue_live := ?_, queue_nodup := ?_, queue_unique := ?_, tree_live := ?_, tree_prices := ?_ }
+    queue_live := ?_, queue_nodup := ?_, queue_unique := ?_, tree_live := ?_, tree_prices := ?_,
+    levels_live := ?_ }
   · intro l' x hx; simp only [Db.levelLive, mapTotal_isSome]; exact hw.queue_live l' x (hsub l' x hx)
   · intro l'
     by_cases he : l' = l
@@ -405,6 +454,7 @@ theorem qRemove_preserves_WF {l : LevelH} {h : OrderH}
   · intro t x₁ h₁ x₂ h₂ he
     simp only [Db.levelPrice, mapTotal_priceOf] at he
     exact hw.tree_prices t _ h₁ _ h₂ he
+  · intro x; simp only [Db.levelLive, mapTotal_isSome]; exact hw.levels_live x
 
 theorem tInsert_preserves_WF {t : Tree} {l : LevelH}
     (hw : db.WF) (hpre : tInsert.pre db t l) (hpost : tInsert.post db t l db') : db'.WF := by
@@ -463,5 +513,155 @@ theorem tRemove_preserves_WF {t : Tree} {l : LevelH}
     exact hw.tree_prices t' _ (hsub _ _ h₁) _ (hsub _ _ h₂) he
 
 end Preservation
+
+-- ============================================================================
+-- Handle validity (§4): which handles each operation keeps valid
+-- ============================================================================
+
+section Validity
+
+variable {db db' : Db}
+
+/-- An order handle is valid while its row is live; likewise a level handle. -/
+abbrev Db.validO (db : Db) (h : OrderH) : Prop := db.orderLive h
+abbrev Db.validL (db : Db) (l : LevelH) : Prop := db.levelLive l
+
+theorem mem_nextIn {xs : List Nat} {x y : Nat} (h : nextIn xs x = some y) : y ∈ xs := by
+  induction xs with
+  | nil => simp [nextIn] at h
+  | cons a rest ih =>
+    cases rest with
+    | nil => simp [nextIn] at h
+    | cons b rest' =>
+      simp only [nextIn] at h
+      split at h
+      · cases h; simp
+      · exact List.mem_cons_of_mem _ (ih h)
+
+/-- Allocation that succeeds returns a handle that is now valid, and changes
+    the validity of no other handle. -/
+theorem orderAlloc_valid {h : OrderH} (hpost : orderAlloc.post db (some h) db') :
+    db'.validO h ∧ ∀ x, x ≠ h → (db'.validO x ↔ db.validO x) := by
+  obtain ⟨-, row, rfl⟩ := hpost
+  refine ⟨by simp [Db.orderLive], fun x hx => ?_⟩
+  simp [Db.orderLive, upd_other _ _ hx]
+
+/-- Allocation that fails (`full`) leaves the store unchanged. -/
+theorem orderAlloc_full (hpost : orderAlloc.post db none db') : db' = db := hpost
+
+/-- `Free` invalidates the freed handle and nothing else. -/
+theorem orderFree_valid {h : OrderH} (hpost : orderFree.post db h db') :
+    ¬ db'.validO h ∧ ∀ x, x ≠ h → (db'.validO x ↔ db.validO x) := by
+  subst hpost
+  refine ⟨by simp [Db.orderLive], fun x hx => ?_⟩
+  simp [Db.orderLive, upd_other _ _ hx]
+
+theorem levelAlloc_valid {l : LevelH} (hpost : levelAlloc.post db (some l) db') :
+    db'.validL l ∧ ∀ x, x ≠ l → (db'.validL x ↔ db.validL x) := by
+  obtain ⟨-, row, rfl⟩ := hpost
+  refine ⟨by simp [Db.levelLive], fun x hx => ?_⟩
+  simp [Db.levelLive, upd_other _ _ hx]
+
+theorem levelAlloc_full (hpost : levelAlloc.post db none db') : db' = db := hpost
+
+theorem levelFree_valid {l : LevelH} (hpost : levelFree.post db l db') :
+    ¬ db'.validL l ∧ ∀ x, x ≠ l → (db'.validL x ↔ db.validL x) := by
+  subst hpost
+  refine ⟨by simp [Db.levelLive], fun x hx => ?_⟩
+  simp [Db.levelLive, upd_other _ _ hx]
+
+/-- The other pool changes no order handle's validity. -/
+theorem levelAlloc_validO {r : Option LevelH} (hpost : levelAlloc.post db r db') (x : OrderH) :
+    db'.validO x ↔ db.validO x := by
+  cases r with
+  | none => rw [hpost]
+  | some l => obtain ⟨-, row, rfl⟩ := hpost; rfl
+
+theorem levelFree_validO {l : LevelH} (hpost : levelFree.post db l db') (x : OrderH) :
+    db'.validO x ↔ db.validO x := by subst hpost; rfl
+
+theorem orderAlloc_validL {r : Option OrderH} (hpost : orderAlloc.post db r db') (x : LevelH) :
+    db'.validL x ↔ db.validL x := by
+  cases r with
+  | none => rw [hpost]
+  | some h => obtain ⟨-, row, rfl⟩ := hpost; rfl
+
+theorem orderFree_validL {h : OrderH} (hpost : orderFree.post db h db') (x : LevelH) :
+    db'.validL x ↔ db.validL x := by subst hpost; rfl
+
+/-- Writes through a valid handle keep every handle's validity. -/
+theorem writeOrder_valid {h : OrderH} {row : OrderRow} (hpre : writeOrder.pre db h row)
+    (hpost : writeOrder.post db h row db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost
+  obtain ⟨old, hold, -⟩ := hpre
+  refine ⟨fun x => ?_, fun x => Iff.rfl⟩
+  by_cases he : x = h
+  · subst he; simp [Db.orderLive, hold]
+  · simp [Db.orderLive, upd_other _ _ he]
+
+theorem writeLevel_valid {l : LevelH} {row : LevelRow} (hpre : writeLevel.pre db l row)
+    (hpost : writeLevel.post db l row db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost
+  obtain ⟨old, hold, -⟩ := hpre
+  refine ⟨fun x => Iff.rfl, fun x => ?_⟩
+  by_cases he : x = l
+  · subst he; simp [Db.levelLive, hold]
+  · simp [Db.levelLive, upd_other _ _ he]
+
+/-- Index operations (hash, queue, tree) change no handle's validity. -/
+theorem hashInsert_valid {h : OrderH} {ok : Bool} (hpost : hashInsert.post db h ok db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  unfold hashInsert.post at hpost
+  split at hpost
+  · rw [hpost.2]; exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
+  · rw [hpost.2]; exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
+
+theorem hashRemove_valid {h : OrderH} (hpost : hashRemove.post db h db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost; exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
+
+theorem qInsertTail_valid {l : LevelH} {h : OrderH} (hpost : qInsertTail.post db l h db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost
+  exact ⟨fun _ => Iff.rfl, fun x => by simp only [Db.levelLive, mapTotal_isSome]⟩
+
+theorem qRemove_valid {l : LevelH} {h : OrderH} (hpost : qRemove.post db l h db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost
+  exact ⟨fun _ => Iff.rfl, fun x => by simp only [Db.levelLive, mapTotal_isSome]⟩
+
+theorem tInsert_valid {t : Tree} {l : LevelH} (hpost : tInsert.post db t l db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost; exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
+
+theorem tRemove_valid {t : Tree} {l : LevelH} (hpost : tRemove.post db t l db') :
+    (∀ x, db'.validO x ↔ db.validO x) ∧ (∀ x, db'.validL x ↔ db.validL x) := by
+  subst hpost; exact ⟨fun _ => Iff.rfl, fun _ => Iff.rfl⟩
+
+/-- Every lookup returns a valid handle or `none`. -/
+theorem hashFind_valid (hw : db.WF) {id : UInt64} {h : OrderH}
+    (hpost : hashFind.post db id (some h)) : db.validO h := hw.hash_live h hpost.1
+
+theorem tFind_valid (hw : db.WF) {t : Tree} {p : UInt64} {l : LevelH}
+    (hpost : tFind.post db t p (some l)) : db.validL l := hw.tree_live t l hpost.1
+
+theorem tBest_valid (hw : db.WF) {t : Tree} {l : LevelH}
+    (hpost : tBest.post db t (some l)) : db.validL l := hw.tree_live t l hpost.1
+
+theorem qFirst_valid (hw : db.WF) {l : LevelH} {h : OrderH}
+    (hpost : qFirst.post db l (some h)) : db.validO h :=
+  (hw.queue_live l h (List.mem_of_mem_head? hpost.symm)).1
+
+theorem qNext_valid (hw : db.WF) {h h' : OrderH}
+    (hpost : qNext.post db h (some h')) : db.validO h' := by
+  obtain ⟨l, -, hr⟩ := hpost
+  exact (hw.queue_live l h' (mem_nextIn hr.symm)).1
+
+theorem owner_valid (hw : db.WF) {h : OrderH} {l : LevelH}
+    (hpost : owner.post db h (some l)) : db.validL l := (hw.queue_live l h hpost).2
+
+end Validity
 
 end EngineDbApi

@@ -712,4 +712,238 @@ theorem absBook_invariants {db : Db} (h : ClientInv db ∧ db.WF) :
 theorem ClientInv_WF_empty : ClientInv Db.empty ∧ Db.empty.WF :=
   ⟨ClientInv_empty, WF_empty⟩
 
+-- ============================================================================
+-- 5. Satisfiability witness: the abstract store is an `EngineDb`
+-- ============================================================================
+
+/-- The abstract store with a pool capacity. Each operation is the contract's
+    own post-state, computed; the laws below show the class is satisfiable,
+    without which a theorem quantified over `EngineDb S` would be vacuous. -/
+structure AbsStore (cap : Nat) where
+  db : Db
+
+/-- A handle strictly above every live one, hence not live. -/
+def freshIn (l : List Nat) : Nat := l.foldl max 0 + 1
+
+theorem le_foldl_max_init (l : List Nat) (a : Nat) : a ≤ l.foldl max a := by
+  induction l generalizing a with
+  | nil => exact Nat.le_refl a
+  | cons x xs ih => exact Nat.le_trans (Nat.le_max_left a x) (ih _)
+
+theorem le_foldl_max {l : List Nat} {x : Nat} (a : Nat) (h : x ∈ l) : x ≤ l.foldl max a := by
+  induction l generalizing a with
+  | nil => cases h
+  | cons y ys ih =>
+    rcases List.mem_cons.mp h with rfl | h
+    · exact Nat.le_trans (Nat.le_max_right a x) (le_foldl_max_init ys _)
+    · exact ih _ h
+
+theorem freshIn_not_mem (l : List Nat) : freshIn l ∉ l := by
+  intro h
+  have := le_foldl_max 0 h
+  unfold freshIn at this
+  omega
+
+def LevelRow.dflt : LevelRow := { price := 0, totalQty := 0 }
+
+/-- `better t p q` as a Boolean. -/
+def betterB : Tree → UInt64 → UInt64 → Bool
+  | .bids, p, q => decide (q ≤ p)
+  | .asks, p, q => decide (p ≤ q)
+
+theorem betterB_iff {t : Tree} {p q : UInt64} : betterB t p q = true ↔ better t p q := by
+  cases t <;> simp [betterB, better]
+
+theorem better_trans {t : Tree} {a b c : UInt64} (h₁ : better t a b) (h₂ : better t b c) :
+    better t a c := by
+  cases t <;> simp only [better, UInt64.le_iff_toNat_le] at * <;> omega
+
+theorem better_refl (t : Tree) (a : UInt64) : better t a a := by
+  cases t <;> simp only [better, UInt64.le_iff_toNat_le] <;> omega
+
+theorem better_of_not {t : Tree} {a b : UInt64} (h : ¬ better t a b) : better t b a := by
+  cases t <;> simp only [better, UInt64.le_iff_toNat_le] at * <;> omega
+
+/-- The best level of a list: the highest bid or the lowest ask. -/
+def pickBest (t : Tree) (pr : LevelH → UInt64) : List LevelH → Option LevelH
+  | [] => none
+  | x :: xs =>
+    match pickBest t pr xs with
+    | none => some x
+    | some y => if betterB t (pr x) (pr y) then some x else some y
+
+theorem pickBest_none {t : Tree} {pr : LevelH → UInt64} {l : List LevelH} :
+    pickBest t pr l = none ↔ l = [] := by
+  cases l with
+  | nil => simp [pickBest]
+  | cons x xs =>
+    simp only [pickBest, reduceCtorEq, iff_false]
+    split
+    · simp
+    · split <;> simp
+
+theorem pickBest_some {t : Tree} {pr : LevelH → UInt64} :
+    ∀ {l : List LevelH} {y : LevelH}, pickBest t pr l = some y →
+      y ∈ l ∧ ∀ z ∈ l, better t (pr y) (pr z) := by
+  intro l
+  induction l with
+  | nil => intro y h; simp [pickBest] at h
+  | cons x xs ih =>
+    intro y h
+    simp only [pickBest] at h
+    split at h
+    · rename_i hn
+      cases h
+      rw [pickBest_none] at hn; subst hn
+      exact ⟨List.mem_cons_self, fun z hz => by
+        rcases List.mem_cons.mp hz with rfl | hz
+        · exact better_refl _ _
+        · cases hz⟩
+    · rename_i y' hy'
+      obtain ⟨hmem, hbest⟩ := ih hy'
+      split at h
+      · rename_i hb
+        cases h
+        have hxy := betterB_iff.mp hb
+        exact ⟨List.mem_cons_self, fun z hz => by
+          rcases List.mem_cons.mp hz with rfl | hz
+          · exact better_refl _ _
+          · exact better_trans hxy (hbest z hz)⟩
+      · rename_i hb
+        cases h
+        have hyx : better t (pr y) (pr x) :=
+          better_of_not (fun h' => hb (betterB_iff.mpr h'))
+        exact ⟨List.mem_cons_of_mem _ hmem, fun z hz => by
+          rcases List.mem_cons.mp hz with rfl | hz
+          · exact hyx
+          · exact hbest z hz⟩
+
+/-- The level whose queue holds `h`, searched over the live levels. -/
+def ownerIn (db : Db) (h : OrderH) : Option LevelH :=
+  db.lLive.find? (fun l => (db.queue l).contains h)
+
+theorem ownerIn_none {db : Db} (hw : db.WF) {h : OrderH} (hn : ownerIn db h = none) :
+    ¬ db.queued h := by
+  rintro ⟨l, hl⟩
+  have hlive := (hw.levels_live l).mp (hw.queue_live l h hl).2
+  exact List.find?_eq_none.mp hn l hlive (List.contains_iff_mem.mpr hl)
+
+theorem ownerIn_some {db : Db} {h : OrderH} {l : LevelH} (hs : ownerIn db h = some l) :
+    h ∈ db.queue l := by
+  unfold ownerIn at hs
+  have hc := List.find?_some hs
+  exact List.contains_iff_mem.mp hc
+
+instance (cap : Nat) : EngineDb (AbsStore cap) where
+  capacity := cap
+  view := AbsStore.db
+  init := ⟨Db.empty⟩
+  orderAlloc s :=
+    if s.db.count < cap then
+      (some (freshIn s.db.oLive),
+       ⟨{ s.db with orders := upd s.db.orders (freshIn s.db.oLive) (some OrderRow.dflt),
+                    oLive := freshIn s.db.oLive :: s.db.oLive }⟩)
+    else (none, s)
+  orderFree s h := ⟨{ s.db with orders := upd s.db.orders h none, oLive := s.db.oLive.erase h }⟩
+  levelAlloc s :=
+    if s.db.levelUsed < cap then
+      (some (freshIn s.db.lLive),
+       ⟨{ s.db with levels := upd s.db.levels (freshIn s.db.lLive) (some LevelRow.dflt),
+                    lLive := freshIn s.db.lLive :: s.db.lLive }⟩)
+    else (none, s)
+  levelFree s l := ⟨{ s.db with levels := upd s.db.levels l none, lLive := s.db.lLive.erase l }⟩
+  readOrder s h := s.db.orders h
+  writeOrder s h row := ⟨{ s.db with orders := upd s.db.orders h (some row) }⟩
+  readLevel s l := s.db.levels l
+  writeLevel s l row := ⟨{ s.db with levels := upd s.db.levels l (some row) }⟩
+  levelCount s l := EngineDbApi.levelCount s.db l
+  owner s h := ownerIn s.db h
+  hashFind s id := s.db.hash.find? (fun h => s.db.orderId h == id)
+  hashInsert s h :=
+    if ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h then (false, s)
+    else (true, ⟨{ s.db with hash := h :: s.db.hash }⟩)
+  hashRemove s h := ⟨{ s.db with hash := s.db.hash.erase h }⟩
+  qInsertTail s l h :=
+    ⟨{ s.db with queue := upd s.db.queue l (s.db.queue l ++ [h]),
+                 levels := s.db.mapTotal l (· + s.db.orderRemaining h) }⟩
+  qRemove s l h :=
+    ⟨{ s.db with queue := upd s.db.queue l ((s.db.queue l).erase h),
+                 levels := s.db.mapTotal l
+                   (fun t => if s.db.orderRemaining h ≤ t then t - s.db.orderRemaining h else 0) }⟩
+  qFirst s l := (s.db.queue l).head?
+  qNext s h := (ownerIn s.db h).bind (fun l => nextIn (s.db.queue l) h)
+  tFind s t p := (s.db.tree t).find? (fun l => s.db.levelPrice l == p)
+  tInsert s t l := ⟨{ s.db with tree := upd s.db.tree t (l :: s.db.tree t) }⟩
+  tRemove s t l := ⟨{ s.db with tree := upd s.db.tree t ((s.db.tree t).erase l) }⟩
+  tBest s t := pickBest t s.db.levelPrice (s.db.tree t)
+  init_view := rfl
+  orderAlloc_law s hw := by
+    by_cases hc : s.db.count < cap
+    · simp only [hc, if_true]
+      refine ⟨⟨?_, OrderRow.dflt, rfl⟩, by simp; omega⟩
+      cases hx : s.db.orders (freshIn s.db.oLive) with
+      | none => rfl
+      | some r =>
+        exact absurd ((hw.orders_live _).mp (by simp [Db.orderLive, hx]))
+          (freshIn_not_mem _)
+    · simp only [hc, if_false]
+      exact ⟨rfl, by simp; omega⟩
+  orderFree_law _ _ _ _ := rfl
+  levelAlloc_law s hw := by
+    by_cases hc : s.db.levelUsed < cap
+    · simp only [hc, if_true]
+      refine ⟨⟨?_, LevelRow.dflt, rfl⟩, by simp; omega⟩
+      cases hx : s.db.levels (freshIn s.db.lLive) with
+      | none => rfl
+      | some r =>
+        exact absurd ((hw.levels_live _).mp (by simp [Db.levelLive, hx]))
+          (freshIn_not_mem _)
+    · simp only [hc, if_false]
+      exact ⟨rfl, by simp; omega⟩
+  levelFree_law _ _ _ _ := rfl
+  readOrder_law _ _ := rfl
+  writeOrder_law _ _ _ _ _ := rfl
+  readLevel_law _ _ := rfl
+  writeLevel_law _ _ _ _ _ := rfl
+  levelCount_law _ _ := rfl
+  owner_law s h hw := by
+    show owner.post s.db h (ownerIn s.db h)
+    cases hs : ownerIn s.db h with
+    | none => exact ownerIn_none hw hs
+    | some l => exact ownerIn_some hs
+  hashFind_law s id _ := by
+    show hashFind.post s.db id (s.db.hash.find? (fun h => s.db.orderId h == id))
+    cases hf : s.db.hash.find? (fun h => s.db.orderId h == id) with
+    | none =>
+      intro h hh heq
+      exact List.find?_eq_none.mp hf h hh (by simp [heq])
+    | some h => exact ⟨List.mem_of_find?_eq_some hf, by simpa using List.find?_some hf⟩
+  hashInsert_law s h _ _ := by
+    by_cases hc : ∃ h' ∈ s.db.hash, s.db.orderId h' = s.db.orderId h
+    · simp [hc, hashInsert.post]
+    · simp [hc, hashInsert.post]
+  hashRemove_law _ _ _ _ := rfl
+  qInsertTail_law _ _ _ _ _ := rfl
+  qRemove_law _ _ _ _ _ := rfl
+  qFirst_law _ _ _ _ := rfl
+  qNext_law s h hw hq := by
+    show qNext.post s.db h ((ownerIn s.db h).bind (fun l => nextIn (s.db.queue l) h))
+    cases hs : ownerIn s.db h with
+    | none => exact absurd hq (ownerIn_none hw hs)
+    | some l => exact ⟨l, ownerIn_some hs, rfl⟩
+  tFind_law s t p _ := by
+    show tFind.post s.db t p ((s.db.tree t).find? (fun l => s.db.levelPrice l == p))
+    cases hf : (s.db.tree t).find? (fun l => s.db.levelPrice l == p) with
+    | none =>
+      intro l hl heq
+      exact List.find?_eq_none.mp hf l hl (by simp [heq])
+    | some l => exact ⟨List.mem_of_find?_eq_some hf, by simpa using List.find?_some hf⟩
+  tInsert_law _ _ _ _ _ := rfl
+  tRemove_law _ _ _ _ _ := rfl
+  tBest_law s t _ := by
+    show tBest.post s.db t (pickBest t s.db.levelPrice (s.db.tree t))
+    cases hb : pickBest t s.db.levelPrice (s.db.tree t) with
+    | none => exact pickBest_none.mp hb
+    | some l => exact pickBest_some hb
+
 end EngineDbAbs

@@ -165,3 +165,24 @@ account-0 order never triggers STP against anything. C agrees:
    amend): confirm they stay out of the generated matcher.
 2. Where the memory-free fragment lives: extend `CSubset` in AMCC, or a
    separate language in this repository.
+
+## Decisions taken after Phase 0 (2026-09-27)
+
+**Decision 1 — spec-only types stay out, as a rejection.** The generated
+matcher supports exactly: LIMIT (rests, GTC), MARKET (IOC), IOC limit,
+POST_ONLY, and cancel, with STP modes NONE, CANCEL_NEW, CANCEL_OLD,
+CANCEL_BOTH and DECREMENT. The request language is C's `OrderRequest`; every
+order-type code outside those four is rejected at entry with
+`rejectedUnsupported` and the store unchanged, the same path as duplicate-id
+and quantity validation. The refinement theorem therefore quantifies over all
+requests. FOK, DAY, stops, market-to-limit, iceberg, minimum quantity and
+amend are out; the §4 amend/replace capacity question is closed.
+
+**Decision 2 — a separate memory-free language in this repository.**
+`CSubset` is not extended. Phase 2 builds a small language here (locals,
+fixed-width arithmetic with overflow as an error, control flow, `forN`,
+extern calls into the EngineDb contract, opaque handles with payload get/set;
+no arrays, pointers or address-of), with semantics parametric in the store.
+Its printer emits the same C dialect as AMCC's and calls only the functions in
+`c/gen/engine_db.h`. Linking its semantics to `CSubset` is a Phase 6
+obligation (`FRAGMENT.md`).
