@@ -551,7 +551,8 @@ theorem BookOkAt_max_of_BookOk {b : BookState} (t : Timestamp) (h : BookOk b) :
     order (INV-11) and it is not a self-trade (INV-12). -/
 def TradeOk (t : Trade) : Prop :=
   t.aggPostOnly = false ∧
-  ∀ g1 g2, t.aggStpGroup = some g1 → t.pasStpGroup = some g2 → g1 ≠ g2
+  (t.aggStpPolicy.isSome →
+    ∀ g1 g2, t.aggStpGroup = some g1 → t.pasStpGroup = some g2 → g1 ≠ g2)
 
 def TradesOk (ts : List Trade) : Prop := ∀ t ∈ ts, TradeOk t
 
@@ -575,10 +576,11 @@ theorem TradesOk_append_list {ts us : List Trade}
     trade that the fill branch emits. -/
 theorem stp_of_not_conflict {inc resting : Order}
     (h : ¬ (selfTradeConflict inc resting = true)) :
-    ∀ g1 g2, inc.stpGroup = some g1 → resting.stpGroup = some g2 → g1 ≠ g2 := by
-  intro g1 g2 h1 h2
+    inc.stpPolicy.isSome →
+      ∀ g1 g2, inc.stpGroup = some g1 → resting.stpGroup = some g2 → g1 ≠ g2 := by
+  intro hp g1 g2 h1 h2
   unfold selfTradeConflict at h
-  rw [h1, h2] at h
+  rw [hp, h1, h2] at h
   simpa using h
 
 theorem doMatch_preserves_TradesOk (fuel : Nat) (inc : Order)

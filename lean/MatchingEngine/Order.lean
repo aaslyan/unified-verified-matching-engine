@@ -41,6 +41,7 @@ structure Trade where
   aggPostOnly   : Bool                -- For INV-11 checking
   aggStpGroup   : Option StpGroup     -- For INV-12 checking
   pasStpGroup   : Option StpGroup     -- For INV-12 checking
+  aggStpPolicy  : Option STPPolicy    -- For INV-12 checking: `none` = aggressor opted out of STP
   deriving Repr, BEq, Inhabited
 
 -- §2.2 Well-formedness predicate (WF-1..20, minus WF-6/7, WF-12, WF-17)
@@ -78,8 +79,10 @@ def Order.wellFormed (o : Order) : Bool :=
   -- WF-15: MARKET/MTL => ¬postOnly
   (o.orderType != .market || !o.postOnly) &&
   (o.orderType != .marketToLimit || !o.postOnly) &&
-  -- WF-16: stpGroup = none ↔ stpPolicy = none
-  (o.stpGroup.isNone == o.stpPolicy.isNone) &&
+  -- WF-16: a policy requires a group (stpPolicy = some _ → stpGroup = some _).
+  -- A group without a policy is allowed: the order opts out of STP as an
+  -- aggressor but can still be the resting side of a conflict.
+  (o.stpPolicy.isNone || o.stpGroup.isSome) &&
   -- WF-18: minQty => minQty > 0 ∧ minQty ≤ qty
   (o.minQty.isNone || o.minQty.any (fun m => m > 0 && m <= o.qty)) &&
   -- WF-19: minQty => ¬postOnly
@@ -110,7 +113,7 @@ def Order.WellFormed (o : Order) : Prop :=
   (o.postOnly = true → o.tif ≠ .ioc ∧ o.tif ≠ .fok) ∧
   (o.orderType = .market → o.postOnly = false) ∧
   (o.orderType = .marketToLimit → o.postOnly = false) ∧
-  (o.stpGroup = none ↔ o.stpPolicy = none) ∧
+  (o.stpPolicy.isSome → o.stpGroup.isSome) ∧
   (o.minQty.isSome → ∀ m, o.minQty = some m → m > 0 ∧ m ≤ o.qty) ∧
   (o.minQty.isSome → o.postOnly = false) ∧
   (o.tif = .fok → o.minQty = none) ∧

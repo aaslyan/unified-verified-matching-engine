@@ -535,7 +535,8 @@ private theorem doMatch_passive_price_buy_acc (fuel : Nat) (inc : Order)
                       aggressorSide := inc.side,
                       aggPostOnly := inc.postOnly,
                       aggStpGroup := inc.stpGroup,
-                      pasStpGroup := resting.stpGroup }], S t.price := by
+                      pasStpGroup := resting.stpGroup,
+                      aggStpPolicy := inc.stpPolicy }], S t.price := by
                     intro t ht
                     rw [List.mem_append] at ht
                     cases ht with
@@ -3226,7 +3227,8 @@ private theorem doMatch_passive_price_sell_acc (fuel : Nat) (inc : Order)
                       aggressorSide := inc.side,
                       aggPostOnly := inc.postOnly,
                       aggStpGroup := inc.stpGroup,
-                      pasStpGroup := resting.stpGroup }], S t.price := by
+                      pasStpGroup := resting.stpGroup,
+                      aggStpPolicy := inc.stpPolicy }], S t.price := by
                     intro t ht
                     rw [List.mem_append] at ht
                     cases ht with

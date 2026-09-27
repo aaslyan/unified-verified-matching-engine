@@ -228,6 +228,23 @@ def test_stp : IO Unit := do
   assert! s6.trades.isEmpty
   assert! s6.book.asks.isEmpty && s6.book.bids.isEmpty
 
+  -- C rule (D2): only the incoming order opts in. A resting order with a
+  -- group but no policy (C: same nonzero account, mode NONE) still blocks.
+  let r7 := { mkLimit .sell 100 5 with stpGroup := some 7 }
+  let s7 := process BookState.empty r7
+  let s8 := process s7.book (mkWithSTP (mkLimit .buy 100 5) 7 .cancelNewest)
+  assert! s8.trades.isEmpty
+  assert! s8.book.asks.length == 1 && s8.book.bids.isEmpty
+
+  -- C rule (D3): an incoming order with mode NONE self-trades.
+  let s9 := process BookState.empty (mkWithSTP (mkLimit .sell 100 5) 7 .cancelOldest)
+  let s10 := process s9.book { mkLimit .buy 100 5 with stpGroup := some 7 }
+  assert! s10.trades.length == 1
+  assert! s10.book.asks.isEmpty && s10.book.bids.isEmpty
+  -- INV-12 holds: the aggressor opted out.
+  assert! stpGuaranteeB s10.trades
+  assert! stpGuaranteeB (s2.trades ++ s4.trades ++ s6.trades ++ s8.trades)
+
   IO.println "✓ Test 11: STP policies"
 
 def test_cancel : IO Unit := do

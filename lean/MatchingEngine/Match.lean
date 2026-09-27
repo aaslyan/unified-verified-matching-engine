@@ -163,7 +163,8 @@ def doMatch (fuel : Nat) (inc : Order) (bids asks : List PriceLevel)
                 aggressorSide := inc.side,
                 aggPostOnly := inc.postOnly,
                 aggStpGroup := inc.stpGroup,
-                pasStpGroup := resting.stpGroup }
+                pasStpGroup := resting.stpGroup,
+                aggStpPolicy := inc.stpPolicy }
               let trades' := trades ++ [trade]
 
               if rest'.remainingQty == 0 then

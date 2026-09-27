@@ -107,15 +107,18 @@ def asksSortedAscB (levels : List PriceLevel) : Bool :=
   | [] | [_] => true
   | l1 :: l2 :: rest => l1.price < l2.price && asksSortedAscB (l2 :: rest)
 
--- §8.4 STP invariant: no trade between same group
+-- §8.4 STP invariant: no trade between same group, unless the incoming
+-- (aggressor) order opted out of STP (`aggStpPolicy = none`, C mode NONE).
 def stpGuaranteeB (trades : List Trade) : Bool :=
   trades.all fun t =>
+    t.aggStpPolicy.isNone ||
     match t.aggStpGroup, t.pasStpGroup with
     | some g1, some g2 => g1 != g2
     | _, _ => true
 
 def STPGuarantee (trades : List Trade) : Prop :=
-  ∀ t ∈ trades, ∀ g1 g2, t.aggStpGroup = some g1 → t.pasStpGroup = some g2 → g1 ≠ g2
+  ∀ t ∈ trades, t.aggStpPolicy.isSome →
+    ∀ g1 g2, t.aggStpGroup = some g1 → t.pasStpGroup = some g2 → g1 ≠ g2
 
 -- INV-11: Post-only guarantee
 def postOnlyGuaranteeB (trades : List Trade) : Bool :=
