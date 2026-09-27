@@ -556,52 +556,44 @@ theorem wf_mem_implies_AllInv (m : Mem) (bids_root asks_root : Option Path) (boo
     AllInv book :=
   amcc_memory_contract_implies_matcher_invariants m bids_root asks_root book h_contract
 
-/-- **Memory Graph Base Derivation**:
-    Proves that an empty pointer graph in C memory strictly enforces
-    all fields of `MemoryStructuralInvariants` with zero assumed properties. -/
+/-- A null root decodes to the empty side. -/
+private theorem decode_none_eq_nil {m : Mem} {l : List PriceLevel}
+    (h : decodePriceLevels m none = some l) : l = [] :=
+  Option.some.inj (h.symm.trans rfl)
+
+/-- **Base case for the C side.** With both roots null, every field of
+    `MemoryStructuralInvariants` holds, for any memory `m`. This is the
+    initial-state half of a reachable-state argument; the per-operation
+    preservation half is not proved yet. -/
 theorem empty_memory_structural_invariants (m : Mem) :
     MemoryStructuralInvariants m none none where
   bids_bst := trivial
   asks_bst := trivial
   bids_llist_wf := by
-    intro bids hb l hl
-    have heq : bids = [] := Option.some.inj (hb.symm.trans rfl)
-    subst heq
-    exact (List.not_mem_nil hl).elim
+    intro bids hb l hl; cases decode_none_eq_nil hb; cases hl
   asks_llist_wf := by
-    intro asks ha l hl
-    have heq : asks = [] := Option.some.inj (ha.symm.trans rfl)
-    subst heq
-    exact (List.not_mem_nil hl).elim
+    intro asks ha l hl; cases decode_none_eq_nil ha; cases hl
   no_empty_lvls := by
     intro bids asks hb ha
-    have heq_b : bids = [] := Option.some.inj (hb.symm.trans rfl)
-    have heq_a : asks = [] := Option.some.inj (ha.symm.trans rfl)
-    subst heq_b heq_a
-    exact ⟨fun l hl => (List.not_mem_nil hl).elim, fun l hl => (List.not_mem_nil hl).elim⟩
+    cases decode_none_eq_nil hb; cases decode_none_eq_nil ha
+    exact ⟨fun l hl => (by cases hl), fun l hl => (by cases hl)⟩
   uncrossed_mem := by
-    intro bids asks hb ha bid hbid
-    have heq_b : bids = [] := Option.some.inj (hb.symm.trans rfl)
-    subst heq_b
-    exact (List.not_mem_nil hbid).elim
+    intro bids asks hb _ bid hbid; cases decode_none_eq_nil hb; cases hbid
   unique_ids := by
     intro book h_alpha
     have heq : book = emptyBook := Option.some.inj (h_alpha.symm.trans rfl)
     subst heq
     exact List.Pairwise.nil
   no_self_tr := by
-    intro bids asks hb ha bid hbid
-    have heq_b : bids = [] := Option.some.inj (hb.symm.trans rfl)
-    subst heq_b
-    exact (List.not_mem_nil hbid).elim
+    intro bids asks hb _ bid hbid; cases decode_none_eq_nil hb; cases hbid
 
-/-- Master Theorem: An empty pointer graph in C memory satisfies `AmccMemoryContract`. -/
+/-- With both roots null, memory decodes to `emptyBook` and satisfies `AmccMemoryContract`. -/
 theorem empty_memory_contract (m : Mem) :
     AmccMemoryContract m none none emptyBook where
   alpha_eq := rfl
   struct_invs := empty_memory_structural_invariants m
 
-/-- Master Theorem: An empty pointer graph in C memory satisfies `WfMem`. -/
+/-- With both roots null, memory satisfies `WfMem`. -/
 theorem empty_memory_wf (m : Mem) :
     WfMem m none none where
   decoded := ⟨emptyBook, empty_memory_contract m⟩

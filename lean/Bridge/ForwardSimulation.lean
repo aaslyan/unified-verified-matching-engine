@@ -60,11 +60,43 @@ def matchStmt (req : OrderRequest) (passive : Order) : Stmt :=
     Expr.lit (Lit.u64 passive.id)
   ]
 
-/-- **Provably Discharged Single-Queue C Insertion Forward Simulation**:
-    Directly bridges AMCC's multi-template C code generator (Pool + Llist + Thash)
-    to concrete C statement execution under `execStmt`, proving that executing
-    the synthesized C insertion AST preserves low-level representation invariants `DbRepInv3`
-    and refines the decoded FIFO order queue `absDb3` with zero axioms and 0 sorry. -/
+/-- Under `DbRepInv3`, the MiniDb queue decodes: `absDb3` succeeds once the
+    decode fuel covers the queue length. -/
+theorem mini_queue_absDb3_decodes
+    (cap nb fuel : Nat) (m : Mem)
+    {free_rest live_qs queue_es : List Path} {chains : List (List Path)}
+    (I : Templates.MiniDb.DbRepInv3 m cap nb (nb - 1) free_rest live_qs queue_es chains)
+    (hfuel : fuel ≥ queue_es.length + 1) :
+    ∃ q, Templates.MiniDb.absDb3 m fuel = some q := by
+  open Templates Templates.MiniDb in
+  have h_abs_m : absDb3 m fuel = queue_es.mapM (readOrder3 m) := by
+    simp only [absDb3]
+    have hlen_le : queue_es.length ≤ fuel - 1 := by omega
+    have hreach := Llist.reaches_headOf_implies_elems m queueNm queue_es I.queue.chain
+      (fuel - 1) hlen_le
+    have hfuel_sub : fuel - 1 + 1 = fuel := by omega
+    rw [hfuel_sub] at hreach
+    have hhd_eq := Llist.head_eq_headOf m queueNm queue_es I.queue.head
+    rw [← hhd_eq] at hreach
+    rw [hreach]
+    rfl
+  open Templates Templates.MiniDb in
+  obtain ⟨ords, hords⟩ : ∃ ords, queue_es.mapM (readOrder3 m) = some ords :=
+    mapM_isSome_iff_exists (readOrder3 m) queue_es I.orders
+  exact ⟨ords, by rw [h_abs_m, hords]⟩
+
+/-- **MiniDb queue insertion forward simulation.**
+
+    Scope: this is AMCC's three-reftype MiniDb (Pool + Llist + Thash) holding
+    `(UInt32 × UInt64)` pairs, not the matching engine's `Order`/`BookState`
+    insertion. It re-exports `Templates.MiniDb.mini_insert_forward_sim3_of_gen`:
+    running the C insertion AST generated from `miniDb3` preserves `DbRepInv3`,
+    and the decoded queue `q` becomes `q ++ [v]`. The pre-state is shown to
+    decode (`mini_queue_absDb3_decodes`), so the refinement cannot hold
+    vacuously through a failed decode.
+
+    It does not discharge `insert_forward_sim` below, which still uses `sorry`.
+    Axioms: `propext`, `Classical.choice`, `Quot.sound`; no `sorry`. -/
 theorem mini_queue_insert_forward_sim
     (cap nb fuel : Nat) (m : Mem) (v : UInt32 × UInt64)
     {free_rest live_qs queue_es : List Path}
@@ -76,12 +108,18 @@ theorem mini_queue_insert_forward_sim
     (hb : (v.1 &&& UInt32.ofNat (nb - 1)).toNat < nb)
     (hfits : (chains[(v.1 &&& UInt32.ofNat (nb - 1)).toNat]'(by rw [I.thash.nb_len]; exact hb)).length < cap)
     (hfuel : fuel ≥ queue_es.length + cap + 5) :
-    ∃ m' free' live' es' chains',
-      execStmt p fuel (Templates.MiniDb.insertStmt3 v) (m.toStore ∅) = .ok (m'.toStore ∅, .normal)
+    ∃ q m' free' live' es' chains',
+      Templates.MiniDb.absDb3 m fuel = some q
+      ∧ execStmt p fuel (Templates.MiniDb.insertStmt3 v) (m.toStore ∅) = .ok (m'.toStore ∅, .normal)
       ∧ Templates.MiniDb.DbRepInv3 m' cap nb (nb - 1) free' live' es' chains'
-      ∧ Templates.MiniDb.absDb3 m' fuel = some ((Templates.MiniDb.absDb3 m fuel).getD [] ++ [v]) := by
-  exact Templates.MiniDb.mini_insert_forward_sim3_of_gen cap nb fuel m v hp I hfree h_fresh hb hfits hfuel
+      ∧ Templates.MiniDb.absDb3 m' fuel = some (q ++ [v]) := by
+  obtain ⟨q, hq⟩ := mini_queue_absDb3_decodes cap nb fuel m I (by omega)
+  obtain ⟨m', free', live', es', chains', hexec, I', habs⟩ :=
+    Templates.MiniDb.mini_insert_forward_sim3_of_gen cap nb fuel m v hp I hfree h_fresh hb hfits hfuel
+  rw [hq, Option.getD_some] at habs
+  exact ⟨q, m', free', live', es', chains', hq, hexec, I', habs⟩
 
+#print axioms mini_queue_absDb3_decodes
 #print axioms mini_queue_insert_forward_sim
 
 /-- Master Forward Simulation Theorem for Order Insertion:
