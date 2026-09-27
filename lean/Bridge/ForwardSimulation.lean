@@ -60,6 +60,30 @@ def matchStmt (req : OrderRequest) (passive : Order) : Stmt :=
     Expr.lit (Lit.u64 passive.id)
   ]
 
+/-- **Provably Discharged Single-Queue C Insertion Forward Simulation**:
+    Directly bridges AMCC's multi-template C code generator (Pool + Llist + Thash)
+    to concrete C statement execution under `execStmt`, proving that executing
+    the synthesized C insertion AST preserves low-level representation invariants `DbRepInv3`
+    and refines the decoded FIFO order queue `absDb3` with zero axioms and 0 sorry. -/
+theorem mini_queue_insert_forward_sim
+    (cap nb fuel : Nat) (m : Mem) (v : UInt32 × UInt64)
+    {free_rest live_qs queue_es : List Path}
+    {chains : List (List Path)}
+    {p : Program} (hp : Templates.MiniDb.genC (Templates.MiniDb.miniDb3 cap nb) = some p)
+    (I : Templates.MiniDb.DbRepInv3 m cap nb (nb - 1) free_rest live_qs queue_es chains)
+    (hfree : free_rest ≠ [])
+    (h_fresh : ∀ q', (v.1, q') ∉ Templates.Thash.elems m "id" chains)
+    (hb : (v.1 &&& UInt32.ofNat (nb - 1)).toNat < nb)
+    (hfits : (chains[(v.1 &&& UInt32.ofNat (nb - 1)).toNat]'(by rw [I.thash.nb_len]; exact hb)).length < cap)
+    (hfuel : fuel ≥ queue_es.length + cap + 5) :
+    ∃ m' free' live' es' chains',
+      execStmt p fuel (Templates.MiniDb.insertStmt3 v) (m.toStore ∅) = .ok (m'.toStore ∅, .normal)
+      ∧ Templates.MiniDb.DbRepInv3 m' cap nb (nb - 1) free' live' es' chains'
+      ∧ Templates.MiniDb.absDb3 m' fuel = some ((Templates.MiniDb.absDb3 m fuel).getD [] ++ [v]) := by
+  exact Templates.MiniDb.mini_insert_forward_sim3_of_gen cap nb fuel m v hp I hfree h_fresh hb hfits hfuel
+
+#print axioms mini_queue_insert_forward_sim
+
 /-- Master Forward Simulation Theorem for Order Insertion:
     Executing the generated C matching engine insertion pipeline on a well-formed memory state `m`
     under call/loop budget `fuel` produces a deterministic post-state `st'` whose persisted memory `st'.toMem`
