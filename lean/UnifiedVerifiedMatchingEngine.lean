@@ -14,3 +14,6 @@ import Matcher.Lang
 import Matcher.Print
 import Matcher.Example
 import Matcher.Program
+import Matcher.Logic
+import Matcher.Refines
+import Matcher.Cancel

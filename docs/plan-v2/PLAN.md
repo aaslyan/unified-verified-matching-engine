@@ -117,3 +117,8 @@ Decisions during Phase 2 (2026-09-27), recorded in docs/plan-v2/STATUS-v2.md and
 • count and levelsUsed are class operations with their own laws (init 0; alloc +1; free −1; every other operation unchanged; alloc fails iff at capacity).
 • Post-only is decided in one place: processB takes the book and trades from process, and postOnlyCode reports the rejection process made (postOnly_reject_agrees).
 • Phase 4 obligation: level-pool sizing needs "no empty level in the store" and levels ≤ orders in Inv; the Phase 3 matcher frees a level when its last order leaves.
+Decisions after Phase 3 (2026-09-27):
+• Evaluation-order rule: no expression in the printed matcher contains a state-changing store call; the language makes every such call a statement (FRAGMENT.md, "Evaluation order"). Phase 5's semantics test generates nested reads and arithmetic calls inside expressions and statement arguments to exercise it.
+• The Lean differential (scripts/matcher_lean_diff.sh) is a regression test through Phase 4: proof-driven refactors of Program.lean must not change its behaviour.
+• Phase 4 checkpoint: after Inv, the rejection branches and cancel, stop and report the matching-loop invariant (the relation between store and locals and the spec's intermediate matching state; one iteration refines one spec matching step) before proving it.
+• capacity + 1 < 2^64 is an explicit hypothesis or contract law, not an Inv clause.

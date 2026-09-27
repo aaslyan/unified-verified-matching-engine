@@ -71,6 +71,31 @@ unreachable, and Phase 5 compares Lean error against C trap exactly.
 A function that ends without `ret` is a `noReturn` error; its printed body
 ends in `me_trap()`. Call nesting is bounded by `fuel` (`fuel` error).
 
+## Evaluation order
+
+C11 leaves the order of subexpressions and of function arguments
+unspecified; only `&&`, `||`, `?:`, the comma operator and the end of a full
+expression are sequence points. The language makes this irrelevant by
+construction, not by printer linearisation:
+
+- Every operation that changes state is a statement: `ext` (every EngineDb
+  operation that writes, and the allocations), `call` (internal functions,
+  whose bodies may write), `emit` (the trade sink), `assign`. None is an
+  expression, so no expression contains a state-changing call.
+- Expressions contain only arithmetic and comparisons (pure), and reads:
+  `getO`, `getL`, `capacity`, `count`. In C these print as calls to the
+  `engine_db.h` getters and to `me_add`/`me_sub`/`me_mul`/`me_div`, none of which
+  change state visible to the matcher (a trap ends the run on both sides).
+  Their relative order inside one expression therefore cannot change a result.
+- The arguments of `ext`, `call` and `emit` are such expressions, evaluated
+  before the statement's single state change.
+- `&&` and `||` short-circuit in the semantics, as in C, so a read guarded by a
+  null test is not evaluated when the test fails.
+
+Phase 5's semantics test generates expressions with several nested reads and
+arithmetic calls, and statements whose arguments contain them, to exercise
+this.
+
 ## No handle
 
 "No handle" is not a sentinel the matcher compares against. A handle value is

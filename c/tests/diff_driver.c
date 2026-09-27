@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
     MatchingEngine_Init(&e, on_trade, NULL);
     uint64_t next_id = 1;
     for (uint64_t i = 0; i < steps; ++i) {
+        printf("%" PRIu64 " pool=%" PRIu64 "\n", i, g_EngineDb.order_pool_n);
         uint64_t id = next_id;
         if (pick(10) < 2 && next_id > 1) id = 1 + pick(next_id - 1); else next_id++;
         if (pick(10) < 2) {

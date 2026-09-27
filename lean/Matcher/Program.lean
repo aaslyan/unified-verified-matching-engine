@@ -197,15 +197,9 @@ def sideFun (isBuy : Bool) : FunDef :=
           retc .rejectedDuplicate])]),
       retc .accepted] }
 
-/-- `MatchingEngine_ProcessOrder`: the entry checks, in `processB`'s order. -/
-def processOrderFun : FunDef where
-  name := "gen_process_order"
-  params := [("id", .u64), ("account", .u64), ("side", .code), ("otype", .code),
-             ("stp", .code), ("price", .u64), ("qty", .u64)]
-  locals := [("dup", .order), ("r", .code)]
-  ret := .code
-  entry := true
-  body := Stmt.block [
+/-- The statements of `gen_process_order`: the entry checks, in `processB`'s
+    order, then the dispatch on the side. -/
+def processOrderStmts : List Stmt := [
     -- 1. Unsupported order type.
     whenS (not' (or' (or' (eqc "otype" OT_LIMIT) (eqc "otype" OT_MARKET))
                      (or' (eqc "otype" OT_IOC) (eqc "otype" OT_POST_ONLY))))
@@ -234,14 +228,18 @@ def processOrderFun : FunDef where
         [v "id", v "account", v "side", v "otype", v "stp", v "price", v "qty"]),
     .ret (v "r")]
 
-/-- `MatchingEngine_CancelOrder`. -/
-def cancelOrderFun : FunDef where
-  name := "gen_cancel_order"
-  params := [("id", .u64)]
-  locals := [("ord", .order), ("lvl", .level), ("side", .code)]
+/-- `MatchingEngine_ProcessOrder`. -/
+def processOrderFun : FunDef where
+  name := "gen_process_order"
+  params := [("id", .u64), ("account", .u64), ("side", .code), ("otype", .code),
+             ("stp", .code), ("price", .u64), ("qty", .u64)]
+  locals := [("dup", .order), ("r", .code)]
   ret := .code
   entry := true
-  body := Stmt.block [
+  body := Stmt.block processOrderStmts
+
+/-- `MatchingEngine_CancelOrder`. -/
+def cancelOrderStmts : List Stmt := [
     call1 "ord" .hashFind [v "id"],
     whenS (.isNullO (v "ord")) (retc .rejectedUnknownId),
     call1 "lvl" .owner [v "ord"],
@@ -255,6 +253,14 @@ def cancelOrderFun : FunDef where
         (call0 (.tRemove .asks) [v "lvl"]),
       call0 .levelFree [v "lvl"]]),
     retc .cancelled]
+
+def cancelOrderFun : FunDef where
+  name := "gen_cancel_order"
+  params := [("id", .u64)]
+  locals := [("ord", .order), ("lvl", .level), ("side", .code)]
+  ret := .code
+  entry := true
+  body := Stmt.block cancelOrderStmts
 
 def program : Program where
   funs := [minFun, sideFun true, sideFun false, processOrderFun, cancelOrderFun]

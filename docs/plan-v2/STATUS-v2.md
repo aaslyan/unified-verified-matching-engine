@@ -1,5 +1,54 @@
 # STATUS-v2
 
+## Phase 4 — Refinement proof (in progress: checkpoint before the matching loop)
+
+**Date:** 2026-09-27. **Base commit:** `14e7477`. **Checkpoint commit:** see `git log -- docs/plan-v2/LOOP-INVARIANT.md`.
+
+**Pre-proof checks (from the Phase 3 review)**
+1. **Evaluation order.** No expression in the printed matcher contains more than one store call that changes state: every state-changing operation (`ext`, `call`, `emit`, `assign`) is a statement in the language, and expressions contain only pure arithmetic and store reads (`getO`, `getL`, `capacity`, `count`). The rule and the argument are in `FRAGMENT.md` ("Evaluation order"). Nested-call generation is added to the Phase 5 semantics test plan (`PLAN.md`, "Decisions after Phase 3").
+2. **C differential at small capacity** (`scripts/matcher_c_capacity.sh`), capacity 8 (seeds 1–40 × 300 calls) and capacity 3 (seeds 100–139 × 300): every seed diverges, and **every first divergence is of one class**. That class is recorded here as **an expected divergence, not a failure**:
+   - **Expected divergence class "capacity".** A LIMIT or POST_ONLY request arrives while the store holds `capacity` orders. The generated matcher returns the capacity code **before any trade** (the v2 rule, `processB`). The handwritten engine has no such rule: its pools hold millions of rows, so it matches and rests. The script fails on any first divergence outside this class, and on any `CheckInvariants` failure of the generated build.
+3. **Lean differential kept as a regression** (`scripts/matcher_lean_diff.sh`, capacities 2, 6, 20): 27,000 steps, 0 mismatches after the Phase 4 refactor of `Program.lean`. The refactor splits the bodies into `processOrderStmts`/`cancelOrderStmts`, and `matcher.c` is byte-identical.
+
+**Files added or changed**
+
+| File | Change |
+|---|---|
+| `lean/Matcher/Logic.lean` | New. Fuel monotonicity; `Eval` (evaluation for some fuel) with one rule per statement form; `LoopRun` for bounded loops; one `runExt_*` lemma per extern operation. |
+| `lean/Matcher/Refines.lean` | New. `Inv`, `CapOk`, `specStep`, `Refines`; the entry checks; the four rejections; cancel of an unknown id. |
+| `lean/Matcher/Cancel.lean` | New. Cancel of a resting order, including the level-removal case; `refines_cancel`. |
+| `lean/Matcher/Program.lean` | Bodies as statement lists (no change to the printed C). |
+| `docs/plan-v2/LOOP-INVARIANT.md` | New. **The review point:** the matching-loop invariant. |
+| `docs/plan-v2/FRAGMENT.md`, `PLAN.md` | Evaluation order; decisions after Phase 3. |
+| `scripts/matcher_lean_diff.sh`, `scripts/matcher_c_capacity.sh`, `c/tests/diff_driver.c` | Regression and capacity runs; the driver prints the store size before each call. |
+
+**Statement.** For a store `s` satisfying `Inv s`, with `CapOk S` (`capacity + 1 < 2^64`) as an explicit hypothesis rather than an `Inv` clause:
+
+`Refines s req` := the program's entry for `req` runs to completion (for some fuel) and returns `codeOf (processB capacity (absBook (view s)) req).1`, with the emitted trades equal to the spec's trades under `tradeObs`, `bookView` of the final store equal to the spec's, and `Inv` holding afterwards.
+
+`Inv` has these clauses:
+- `WF`;
+- `ClientInv`;
+- live orders ↔ queued;
+- live levels ↔ in a tree;
+- `count = restingCount`;
+- `levelsUsed = number of tree levels`;
+- `count ≤ capacity`.
+
+**Theorems proved (no `sorry`; axioms `propext`, `Classical.choice`, `Quot.sound`)**
+- `refines_static`: unsupported and invalid requests (including `qty > Qmax`).
+- `refines_duplicate`, `refines_capacity`.
+- `refines_cancel_unknown`, `refines_cancel_resting`, so **`refines_cancel : Refines s (.cancel id)`** for every id.
+- Supporting: the observation lemmas `bookSize_absBook`, `idOnBook_absBook`, `requestMayRest_iff`, `views_eq_of_perm` (sorted-permutation uniqueness) and `cancel_spec_view`, plus the `Inv` preservation lemmas for cancel.
+
+**Remaining in Phase 4:** the matching loop, the resting step, and the assembly into `matcher_refines` for every request. Per the review instruction, **the loop proof waits for the review of `LOOP-INVARIANT.md`**, which has two ⚑ decisions.
+
+**`sorry` count:** deliverables 0. Project: 2, unchanged (`lean/Bridge/ForwardSimulation.lean`, superseded by this phase's final theorem).
+
+**Tests:** `lake build` is clean (95 jobs). Lean regression: 0 mismatches. C differential (capacity 1,000,000): 100 seeds × 1,000 calls, traces identical. `make test-gen`: 7/7.
+
+---
+
 ## Phase 3 — Port the matcher
 
 **Date:** 2026-09-27. **Base commit:** `f9c69e0`. **Phase commit:** see `git log -- c/gen/matcher.c`.
