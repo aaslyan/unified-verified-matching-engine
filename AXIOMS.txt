@@ -17,3 +17,6 @@
 'process_PostOnlyGuarantee' depends on axioms: [propext, Quot.sound]
 'process_preserves_BookInvariant' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Templates.ArrayTable.genWellFormed' depends on axioms: [propext, Classical.choice, Quot.sound]
+'processOrder_computeProcessFuel_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
+'reachable_all_invariants' depends on axioms: [propext, Classical.choice, Quot.sound]
+'reachable_all_invariants_prefix' depends on axioms: [propext, Classical.choice, Quot.sound]

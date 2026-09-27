@@ -119,12 +119,16 @@ the book stays uncrossed and sorted on both sides (\texttt{AllInv}), but
 also no ghost orders, status consistency, FIFO within each price level,
 and no resting market, market-to-limit, or minimum-quantity orders,
 together with the post-only and self-trade-prevention guarantees on
-emitted trades---for arbitrary book sizes, with a fuel bound computed
-from the book state and proved sufficient. The proof spans three files
-totaling roughly 5{,}700 lines: a 3{,}965-line constructive core, a
-1{,}423-line extension lifting the remaining \S13 invariants, and a
-complementary 311-line structural proof via three-case analysis of the
-matching termination condition.
+emitted trades---for arbitrary book sizes. Both recursion budgets, the
+inner matching loop and the outer stop cascade, are computed from the
+state and proved sufficient. The results extend to every book reachable
+from the empty book by a finite sequence of well-formed orders. The
+proof spans five files totaling roughly 6{,}250 lines: a 3{,}986-line
+constructive core, a 1{,}423-line extension lifting the remaining \S13
+invariants, a complementary 311-line structural proof via three-case
+analysis of the matching termination condition, a 346-line proof that
+the outer cascade budget is sufficient, and a 182-line reachable-state
+corollary.
 
 The overarching lesson is that feature composition is where bugs hide.
 Each individual feature is correctly specified in isolation. The bugs
@@ -762,6 +766,33 @@ this redistribution---only the visible/hidden split changes---and the
 fill step that triggered the reload strictly decreased
 \texttt{totalRemaining} by the filled quantity. The composition is a
 net decrease.
+
+\subsection{The Outer Cascade Budget}
+\label{sec:lean-cascade-fuel}
+
+The stop cascade is a second, mutually recursive loop:
+\texttt{processOrder} matches an order, \texttt{processCascade} walks
+the resulting trades, and \texttt{processTriggeredStops} re-enters
+\texttt{processOrder} for each stop that a trade triggers. This loop
+originally ran on the same constant budget of 100. The invariant proofs
+are parametric in this fuel, so they never exposed the problem. When
+fuel ran out, triggered stops were already removed from the dormant
+list and were silently dropped, and the resulting book was still
+well-formed. A single trade that triggers 150 dormant stops showed the
+loss.
+
+\texttt{process} now calls \texttt{processOrder} with
+\texttt{computeProcessFuel}, which is derived from the book, the
+dormant stops, and the incoming order. \texttt{TheoremsFuel.lean} proves
+that this budget is never binding: running with any larger fuel yields
+the identical book and trades
+(\texttt{processOrder\_computeProcessFuel\_stable}). The argument
+needs two facts. First, each matching pass emits at most as many
+trades as the incoming order's remaining quantity, because every fill
+consumes at least one unit. Second, the dormant-stop list only shrinks
+while a non-stop order is being processed, so every level of nesting
+consumes at least one stop. The required fuel is therefore linear in
+the incoming quantity plus the weight of the dormant stops.
 
 \subsection{The Elegant Argument}
 \label{sec:lean-elegant}
@@ -1739,9 +1770,9 @@ To reproduce the FIFO counterexample:
 
 To reproduce the fuel-unsoundness issue (\S\ref{sec:lean-fuel}):
 \begin{enumerate}[nosep]
-\item Revert \texttt{computeMatchFuel} in
-      \texttt{matcher\_lean/MatchingEngine/Process.lean} to the constant
-      \texttt{defaultFuel~:=~100}.
+\item In \texttt{lean/MatchingEngine/Process.lean}, replace every call to
+      \texttt{computeMatchFuel} in \texttt{processOrder} with the
+      constant \texttt{100}.
 \item Re-run \texttt{lake build}. The proof of
       \texttt{doMatch\_preserves\_AllInv} will fail: the measure
       argument no longer dominates the recursive call bound, and any

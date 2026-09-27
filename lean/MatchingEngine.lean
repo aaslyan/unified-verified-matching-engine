@@ -9,4 +9,6 @@ import MatchingEngine.Invariants
 import MatchingEngine.Theorems
 import MatchingEngine.TheoremsFull
 import MatchingEngine.TheoremsElegant
+import MatchingEngine.TheoremsReachable
+import MatchingEngine.TheoremsFuel
 import MatchingEngine.Tests
