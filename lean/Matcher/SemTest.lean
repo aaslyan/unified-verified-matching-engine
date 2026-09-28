@@ -220,8 +220,11 @@ def errName : Err → String
   | .tradeBuffer => "tradeBuffer" | .fuel => "fuel" | .noFun => "noFun"
   | .noReturn => "noReturn" | .arity => "arity"
 
-def outcome (cap : Nat) (P : Program) : String :=
-  match runEntry (S := AbsStore cap) P 64 "t_main" [] EngineDb.init with
+/-- `fuel` bounds nesting depth, including the length of a statement sequence;
+    it must not run out (the C has no counterpart), so `leanerr fuel` fails
+    the comparison like any other `leanerr`. -/
+def outcome (cap : Nat) (P : Program) (fuel : Nat := 64) : String :=
+  match runEntry (S := AbsStore cap) P fuel "t_main" [] EngineDb.init with
   | .ok (.u64 v, s, ts) =>
     let tr := " ".intercalate (ts.map fun t => s!"{t.makerId},{t.takerId},{t.price},{t.qty}")
     s!"ok {v.toNat} {EngineDb.count s} [{tr}]"

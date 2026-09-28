@@ -7,7 +7,10 @@
 # GEN=semvalid selects the validity-aware generator (lean/Matcher/SemValid.lean):
 # every store-call kind and the null-handle test, every handle use valid at
 # its point of use (Phase 5 extension 5b); the default is semtest (lean/Matcher/SemTest.lean).
-# Usage: [GEN=semtest|semvalid] tests/semantics/run.sh [seed] [programs] [capacity]
+# Handle validity is built into semvalid and cannot be turned off.
+# SEMVALID_CFG=small selects its small-constants configuration (long programs,
+# mostly run to completion).
+# Usage: [GEN=semtest|semvalid] [SEMVALID_CFG=small] tests/semantics/run.sh [seed] [programs] [capacity]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 seed="${1:-1}"; n="${2:-200}"; cap="${3:-3}"

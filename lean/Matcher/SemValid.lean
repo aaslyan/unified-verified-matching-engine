@@ -30,7 +30,23 @@ Each program's semantic outcome is computed by `runEntry` on the model store,
 exactly as in `SemTest`; the C side runs the printed program on the adapter +
 handwritten data layer. `run.sh` with `GEN=semvalid` compares them.
 
-Run: `semvalid <seed> <count> <cap> <outdir>`
+**Validity is a permanent property of this generator, not an option.** The
+contract does not fix a handle-reuse policy: which handle an allocation
+returns is left to the store. The model store and the C data layer choose
+differently, so a program that uses a stale handle can observe the difference,
+and exact agreement between them is meaningful only for programs whose handle
+uses are valid. (The refinement theorem is unaffected: it quantifies over
+every store satisfying the laws.) No configuration turns the checks off.
+
+Configurations (`SEMVALID_CFG`):
+* default: pure statements from `SemTest`, with every trap edge; many
+  programs trap part-way;
+* `small`: longer programs (40–119 statements) whose pure statements use
+  small constants and cannot trap, except one in 48 drawn from `SemTest`; about
+  nine programs in ten run to completion, so long store-call sequences are
+  executed to the end.
+
+Run: `[SEMVALID_CFG=small] semvalid <seed> <count> <cap> <outdir>`
 -/
 
 namespace SemValid
@@ -366,25 +382,104 @@ def genStoreOp : V cap (Option Stmt) := do
       return some (.ite (.bin .and (.un .not (.isNullO (.var (oName i))))
           (.bin .lt (.getO (.var (oName i)) .qty) (.lit 10))) (bump x (.lit 1)) .skip)
 
+-- ============================================================================
+-- The small-constants configuration
+-- ============================================================================
+
+/-! Pure statements for the `small` configuration: small literals, `+` and
+division by a nonzero literal only, loops that stay within their bound,
+helpers that always return, and no trade emission. None of them can trap, so
+programs run to completion unless one of the rare statements drawn from the
+full `SemTest` generator (with its overflow, loop-bound, trade-buffer and
+missing-return edges) traps. The store part is the same as in the default
+configuration, and so is the validity of every handle use. -/
+
+partial def smallU64 (d : Nat) : G Expr := do
+  let leaf : G Expr := do
+    match ← pick 6 with
+    | 0 | 1 => return .lit ((← pick 20).toUInt64)
+    | 2 | 3 => return .var (← choose u64Vars)
+    | 4 => return .capacity
+    | _ => return .count
+  if d = 0 then leaf else
+  match ← pick 8 with
+  | 0 | 1 => leaf
+  | 2 => return .bin .div (← smallU64 (d - 1)) (.lit ((← pick 5) + 1).toUInt64)
+  | 3 => return .bin .mul (.lit ((← pick 4).toUInt64)) (.lit ((← pick 4).toUInt64))
+  | _ => return .bin .add (← smallU64 (d - 1)) (← smallU64 (d - 1))
+
+partial def smallBool (d : Nat) : G Expr := do
+  match ← pick (if d = 0 then 4 else 7) with
+  | 0 => return .blit ((← pick 2) = 0)
+  | 1 => return .var "b0"
+  | 2 | 3 => return .bin (← choose [BinOp.eq, .ne, .lt, .le]) (← smallU64 1) (← smallU64 1)
+  | 4 => return .bin .and (← smallBool (d - 1)) (← smallBool (d - 1))
+  | 5 => return .bin .or (← smallBool (d - 1)) (← smallBool (d - 1))
+  | _ => return .un .not (← smallBool (d - 1))
+
+mutual
+
+partial def smallStmt (d depth : Nat) (helpers : List Ident) : G Stmt := do
+  match ← pick (if d = 0 then 4 else 7) with
+  | 0 | 1 => return .assign (← choose u64Vars) (← smallU64 2)
+  | 2 => return .assign "b0" (← smallBool 2)
+  | 3 =>
+    if helpers.isEmpty then return .assign (← choose u64Vars) (← smallU64 2)
+    else return .call (some (← choose u64Vars)) (← choose helpers) [← smallU64 1, ← smallU64 1]
+  | 4 => return .ite (← smallBool 2) (← smallBlock (d - 1) depth helpers) (← smallBlock (d - 1) depth helpers)
+  | _ =>
+    if depth ≥ 2 then return .assign "x0" (← smallU64 1) else
+    let i := s!"i{depth}"
+    -- iteration count at or below the bound
+    let (bnd, n) ← match ← pick 2 with
+      | 0 => do
+        let k ← pick 6
+        pure (Bound.lit k, Expr.lit (← choose [k, k - 1]).toUInt64)
+      | _ => do
+        let k ← pick 3
+        pure (Bound.capPlus k, ← choose [Expr.bin .add .capacity (.lit k.toUInt64), .capacity, .lit 0])
+    let body ← smallBlock (d - 1) (depth + 1) helpers
+    return blk [.assign i (.lit 0),
+      .loop bnd (.bin .lt (.var i) n) (blk [body, .assign i (.bin .add (.var i) (.lit 1))])]
+
+partial def smallBlock (d depth : Nat) (helpers : List Ident) : G Stmt := do
+  let n ← pick 3
+  let mut ss := []
+  for _ in [0:n + 1] do
+    ss := ss ++ [← smallStmt d depth helpers]
+  return blk ss
+
+end
+
+/-- A helper `name(a, b)` that always returns. -/
+def smallHelper (name : Ident) (earlier : List Ident) : G FunDef := do
+  let body ← smallBlock 2 0 earlier
+  return { name := name, params := [("x0", .u64), ("x1", .u64)],
+           locals := SemTest.locals.filter (fun p => p.1 != "x0" && p.1 != "x1"), ret := .u64,
+           entry := false, body := blk [body, .ret (← smallU64 2)] }
+
 def vlocals : List (Ident × Ty) :=
   [("x0", .u64), ("x1", .u64), ("x2", .u64), ("x3", .u64), ("b0", .bool), ("i0", .u64), ("i1", .u64)] ++
   (List.range nO).map (fun i => (oName i, Ty.order)) ++ (List.range nL).map (fun i => (lName i, Ty.level))
 
-def genValidProgram (cap : Nat) : V cap Program := do
+/-- `small`: the small-constants configuration (longer programs, pure
+    statements that cannot trap except a rare full-generator statement). -/
+def genValidProgram (cap : Nat) (small : Bool) : V cap Program := do
   let nh ← liftG (pick 2)
   let mut helpers : List FunDef := []
   let mut names : List Ident := []
   for k in [0:nh] do
     let name := s!"h{k}"
-    helpers := helpers ++ [← liftG (genHelper true cap name names)]
+    helpers := helpers ++ [← liftG (if small then smallHelper name names else genHelper true cap name names)]
     names := names ++ [name]
-  let n := 15 + (← liftG (pick 40))
+  let n ← liftG (if small then do pure (40 + (← pick 80)) else do pure (15 + (← pick 40)))
   let mut ss : List Stmt := []
   let mut tries := 0
   while ss.length < n && tries < 20 * n do
     tries := tries + 1
-    if (← liftG (pick 16)) = 0 then
-      ss := ss ++ [← liftG (genStmt true cap 1 0 names)]
+    if (← liftG (pick (if small then 8 else 16))) = 0 then
+      let full : Bool ← if small then do pure (decide ((← liftG (pick 48)) = 0)) else pure true
+      ss := ss ++ [← liftG (if full then genStmt true cap 1 0 names else smallStmt 1 0 names)]
     else
       if let some st ← genStoreOp then ss := ss ++ [st]
   let fin := Stmt.ret (.bin .add (.var "x0") (.bin .add (.var "x1") (.bin .add (.var "x2") (.var "x3"))))
@@ -400,7 +495,10 @@ def main (args : List String) : IO UInt32 := do
   let count := (args.getD 1 "100").toNat!
   let cap := (args.getD 2 "3").toNat!
   let dir := args.getD 3 "."
-  let mut x := seed * 2862933555777941757 + 3037000493 + cap.toUInt64 * 0x9E3779B97F4A7C15
+  let small := (← IO.getEnv "SEMVALID_CFG") == some "small"
+  let cfg := if small then "small" else "default"
+  let mut x := seed * 2862933555777941757 + 3037000493 + cap.toUInt64 * 0x9E3779B97F4A7C15 +
+    (if small then 0xD1B54A32D192ED03 else 0)
   let mut classes : List (String × Nat) := []
   let mut cov : List (String × Nat) := []
   let mut covOk : List (String × Nat) := []
@@ -408,13 +506,13 @@ def main (args : List String) : IO UInt32 := do
   for k in [0:count] do
     let st0 : VS cap := { rng := x, s := EngineDbApi.EngineDb.init, ov := Array.replicate nO none,
                           lv := Array.replicate nL none, known := [], pk := [], cov := [] }
-    let (P, st) := (genValidProgram cap).run st0
+    let (P, st) := (genValidProgram cap small).run st0
     x := st.rng
     for (c, n) in st.cov do
       cov := addCov cov c n
     IO.FS.writeFile s!"{dir}/prog{k}.c" (Matcher.Print.program P)
     IO.FS.writeFile s!"{dir}/prog{k}.sexp" (AstDump.dump P)
-    let o := outcome cap P
+    let o := outcome cap P 1024
     IO.FS.writeFile s!"{dir}/prog{k}.exp" (o ++ "\n")
     if o.startsWith "ok" then
       nOk := nOk + 1
@@ -423,7 +521,7 @@ def main (args : List String) : IO UInt32 := do
     let cls := if o.startsWith "ok" then "ok" else ((o.splitOn " ").take 2 |> " ".intercalate)
     classes := if classes.any (·.1 == cls) then classes.map fun (c, n) => if c == cls then (c, n + 1) else (c, n)
       else classes ++ [(cls, 1)]
-  IO.println s!"semvalid: seed {seed}, {count} programs, cap {cap}; outcomes {classes}"
+  IO.println s!"semvalid [{cfg}]: seed {seed}, {count} programs, cap {cap}; outcomes {classes}"
   IO.println s!"semvalid coverage (store calls and handle uses emitted): {cov}"
   IO.println s!"semvalid coverage in the {nOk} programs that ran to completion (all executed): {covOk}"
   return 0

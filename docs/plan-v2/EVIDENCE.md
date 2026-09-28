@@ -233,6 +233,20 @@ compilers, same outcome comparison, trap class included, printer reparse
 included). Pure statements from §3 (arithmetic, branches, bounded loops,
 trade emission, helper calls) are interleaved, so programs also trap.
 
+**Why validity is required, and why it is permanent.** Handle reuse is
+outside the contract: the laws say an allocation returns a fresh live handle,
+not which one. The model store numbers a new handle one above the largest live
+one, so freed numbers recur; the C data layer returns whichever pool row its
+free list hands out. A program that uses a stale
+handle can therefore observe the choice, so exact agreement between the model
+store and the C data layer is meaningful only over valid-handle programs. The
+refinement theorem is unaffected: it quantifies over every store satisfying
+the laws, whatever its reuse policy, and the matcher uses only valid handles
+(`Refines` requires the entry function to return `.ok`, so no
+`invalidHandle` or `contract` error occurs). The
+validity checks are therefore a permanent property of the generator, not a
+test option: no configuration turns them off.
+
 **Run.** `GEN=semvalid tests/semantics/run.sh <seed> 200 <cap>`, seeds 1–5,
 capacities 0, 1, 3 and 7.
 
@@ -276,6 +290,59 @@ null tests and guarded reads.
 | null test, order / level | 6,843 / 6,691 | 2,135 / 2,056 |
 | `&&`-guarded read through a possibly-null handle | 6,522 | 1,974 |
 
+**Second configuration: small constants (`SEMVALID_CFG=small`).** The
+default configuration's pure statements carry every trap edge, so two programs
+in three trap part-way, and the store-call sequence after the trap is never
+executed. The `small` configuration generates longer programs (40–119
+statements) whose pure statements use small constants, `+`, division by a
+nonzero literal, loops within their bound and helpers that always return, so
+they cannot trap. One pure statement in 48 is still drawn from the full
+generator, so traps after long store sequences still occur. The store part,
+the validity checks, the compilers and the exact comparison are the same.
+The Lean runner's fuel (which bounds nesting, including sequence length, and
+has no C counterpart) is raised from 64 to 1,024 for both configurations, so
+no program runs out of it. The default configuration's outcomes are unchanged.
+
+Run: `GEN=semvalid SEMVALID_CFG=small tests/semantics/run.sh <seed> 200 <cap>`,
+seeds 1–5, capacities 0, 1, 3 and 7.
+
+| Measure | Value |
+|---|---|
+| Distinct programs | 4,000 |
+| Compiled runs (× 3 configurations) | 12,000 |
+| Agree with `execStmt` | **all 12,000** (gcc -O0, gcc -O2, clang -O2: 4,000/4,000 each) |
+| Printer reparse | 4,000 of 4,000 identical |
+| Filtered | none |
+| **Ran to completion** | **3,587 of 4,000 (89.7%)**: capacity 0 848/1,000, 1 900/1,000, 3 905/1,000, 7 934/1,000 |
+| Other outcomes | trap 1 293, trap 3 61, trap 2 59 |
+| Store calls and handle uses executed in completed programs | 205,039 (57.2 per program; default configuration: 36,982, 27.8 per program) |
+
+Per kind, inside the 3,587 completed programs (every call executed):
+
+| Kind | Completed | Kind | Completed |
+|---|---|---|---|
+| `order_alloc` | 39,466 | `order_free` | 4,642 |
+| `level_alloc` | 19,715 | `level_free` | 2,773 |
+| `order_set_id` | 1,624 | `order_set_account` | 1,833 |
+| `order_set_side` | 1,802 | `order_set_stp_mode` | 1,761 |
+| `order_set_price` | 1,753 | `order_set_qty` | 1,764 |
+| `order_set_remaining` | 1,933 | `level_set_price` | 3,608 |
+| `hash_find` | 19,674 | `hash_insert` | 1,537 |
+| `hash_remove` | 820 | `order_owner` | 6,343 |
+| `queue_insert_tail` | 3,186 | `queue_remove` | 1,241 |
+| `queue_first` | 4,620 | `queue_next` | 1,769 |
+| `bids_find` | 9,949 | `asks_find` | 9,861 |
+| `bids_insert` | 1,070 | `asks_insert` | 1,037 |
+| `bids_remove` | 649 | `asks_remove` | 600 |
+| `bids_best` | 9,826 | `asks_best` | 10,002 |
+| order field read | 1,977 | level price read | 612 |
+| level count read | 2,186 | `&&`-guarded read | 11,710 |
+| null test, order | 11,879 | null test, level | 11,817 |
+
+The least-exercised kinds grew roughly tenfold over the default
+configuration's completed programs (`asks_remove` 59 → 600, level price read
+65 → 612, `bids_remove` 66 → 649).
+
 **Mismatch found and fixed (a generator bug).** The first full run had one
 mismatch: seed 3, capacity 3, program 122. `execStmt` returned
 `ok 111 0 [1,19,2,0]`, and all three compilers returned `ok 5 0 [1,19,2,0]`.
@@ -306,7 +373,7 @@ diffs the two.
 
 **Results.**
 - `c/gen/matcher.c`: reparses to the tree of `lean/Matcher/Program.lean` (5 functions).
-- Every random program of the semantics test: 4,000 of 4,000 identical; of the validity-aware extension (§3b): 4,000 of 4,000.
+- Every random program of the semantics test: 4,000 of 4,000 identical; of the validity-aware extension (§3b): 4,000 + 4,000 of 4,000 + 4,000.
 - Sensitivity: changing one `<=` to `<` in `matcher.c`, or one loop's trap class, is reported: a tree difference in the first case, not the printer's language in the second.
 
 ## Summary
@@ -317,4 +384,5 @@ diffs the two.
 | Differential | 180,000 steps, 6 configurations | oracle = generated on every step |
 | Semantics | 4,000 programs × 3 compilers | 12,000 of 12,000 identical outcomes, trap class included; nothing filtered |
 | Semantics, validity-aware (all 34 store-call kinds, null tests) | 4,000 programs × 3 compilers | 12,000 of 12,000 identical outcomes; nothing filtered |
+| Semantics, validity-aware, small constants | 4,000 programs × 3 compilers | 12,000 of 12,000 identical; 89.7% run to completion |
 | Printer | `matcher.c` + every semantics program | identical trees |

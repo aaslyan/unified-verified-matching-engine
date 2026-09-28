@@ -1,5 +1,28 @@
 # STATUS-v2
 
+## Phase 5 closing additions
+
+**Date:** 2026-09-28. **Base commit:** `285b0a6`.
+
+1. **Handle reuse is outside the contract** (EVIDENCE §3b). The laws say an allocation returns a fresh live handle, not which one. The model store numbers above the largest live handle; the C data layer pops a LIFO free list. So exact agreement between them is meaningful only over valid-handle programs. The theorem is unaffected: it quantifies over every store satisfying the laws, and `Refines` requires the matcher's run to return `.ok`, so it never uses an invalid handle. The validity checks are a permanent property of `semvalid`, stated in its docstring and in `run.sh`; no configuration turns them off.
+2. **Second SemValid configuration, small constants** (`SEMVALID_CFG=small`, EVIDENCE §3b).
+   - **Programs:** 40–119 statements. Pure statements cannot trap, except one in 48 drawn from the full generator. Store part and validity unchanged.
+   - **Runs:** 4,000 programs (seeds 1–5 × 200 × capacities 0/1/3/7) × gcc -O0 / gcc -O2 / clang -O2 = 12,000 runs, **all identical** to `execStmt`. Printer reparse 4,000/4,000. Nothing filtered.
+   - **Completion rate: 3,587 / 4,000 = 89.7%** (capacity 0: 84.8%, 1: 90.0%, 3: 90.5%, 7: 93.4%). The rest: trap 1 293, trap 3 61, trap 2 59.
+   - **Store calls executed in completed programs:** 205,039, 57.2 per program. The default configuration has 27.8 per program.
+   - **Per kind inside completed programs:** all 34 kinds. The least-exercised are `asks_remove` 600, level price read 612 and `bids_remove` 649; the most are `order_alloc` 39,466 and `hash_find` 19,674. The full table is in EVIDENCE.
+   - **Mismatches:** none.
+
+**Changes**
+- `lean/Matcher/SemValid.lean`: `smallU64`, `smallBool`, `smallStmt`/`smallBlock`, `smallHelper`, and `genValidProgram … small`. The configuration comes from `SEMVALID_CFG` and is mixed into the seed. The Lean runner's fuel goes to 1,024; it bounds nesting including sequence length, has no C counterpart, and ran out on long programs at 64 (`leanerr fuel`, caught before the run). The default configuration's outcomes are unchanged, re-checked on seed 1 at capacity 3.
+- `lean/Matcher/SemTest.lean`: `outcome` takes the fuel (default 64, so `semtest` is unchanged).
+- `tests/semantics/run.sh` and `tests/run_all.sh`: the small configuration.
+- `docs/plan-v2/EVIDENCE.md`.
+
+**Tests:** `lake build` clean, 0 `sorry`. Both SemValid configurations green.
+
+---
+
 ## Phase 5 closing items
 
 **Date:** 2026-09-28. **Base commit:** `82eb6ba`.
