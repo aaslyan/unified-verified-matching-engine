@@ -1,5 +1,49 @@
 # STATUS-v2
 
+## Phase 4 closing item — the run-level theorem
+
+**Date:** 2026-09-28. **File:** `lean/Matcher/Run.lean`.
+
+```
+theorem matcher_run_refines [EngineDb S] (hcap : CapOk S) (qs : List Req) :
+    ∃ fuel outs, matcherRun fuel (EngineDb.init : S) qs = .ok outs ∧
+      outs.map Prod.fst = specTrace (capacity S) BookState.empty qs ∧ ∀ x ∈ outs, Inv x.2
+```
+
+- `matcherRun` runs each request through the program's entry function under the Lean semantics of the printed program. It records `(result code, trades, bookView of the decoded store)` and the store after each step.
+- `specTrace` records `(codeOf code, trades.map tradeObs, bookView book)` along `runB`'s recursion. `specTrace_runB` shows its last book is `runB`'s.
+- There is no side condition on the list. `CapOk` (`capacity + 1 < 2^64`) is the standing hypothesis, as for `matcher_refines`.
+
+**Route (ii).** `bookView` drops fields:
+- of an order: `postOnly`, `status`, `timestamp`;
+- of the book: `lastTradePrice`, `nextId`, `clock`.
+
+So I proved `processB_congr` rather than injectivity. On two books without stops and with equal views, `processB` gives the same result code, the same trades (exactly equal, not just through `tradeObs`) and new books with equal views.
+
+**Why route (iii) does not arise.** No dropped field is read on the path `processB` takes for a C request:
+- the statuses and timestamps of resting orders are never read by `doMatch`, `dispose`, `insertOrder` or `cancelOrder`;
+- `clock` only stamps;
+- `nextId` is overwritten by `processWithId`;
+- `lastTradePrice` is read only when a stop triggers.
+
+The one place a dropped field could matter is the stop list, whose firing order uses timestamps. Every book on the run has an empty stop list: it starts empty, and each step's book has the view of a decoded store, whose stop list is empty (`stops_nil_of_nB`). So `processB_congr` takes `stops = []` for both books, and the chain carries it from step to step. It is a property of the run, not a condition on the request list.
+
+**The proof**
+- `doMatch_norm`: `doMatch` commutes with the normal form of the view. By induction on fuel, with an explicit case analysis over every `doMatch` branch on both sides (`dsimp` and targeted `rw`), including branches the matcher never reaches.
+- Congruences for `idOnBook`, `bookSize`, `wouldCross`, `postOnlyCode`, `computeMatchFuel`, `insertDesc`/`insertAsc`/`insertOrder`, `dispose`, `removeLevelOrder`, `findOrderOnBook` and `cancelOrder`.
+- `mrOf_congr`, then `processB_congr`.
+- `run_from`: `matcher_refines` chained on `bookView (decode s_k) = bookView b_k`, with fuel monotonicity (`runEntry_mono`, `matcherRun_mono`).
+
+**`#print axioms`**
+```
+'MatcherRun.matcher_run_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
+'MatcherRun.processB_congr' depends on axioms: [propext, Classical.choice, Quot.sound]
+```
+
+`lake build`: clean (103 jobs). No `sorry` in `Run.lean`.
+
+---
+
 ## Phase 4 — Refinement proof (complete)
 
 **Date:** 2026-09-27. **Base commit:** `14e7477`. **Checkpoint commit:** `d176c71`. **Phase commit:** see `git log -- lean/Matcher/Accept.lean`.
