@@ -36,7 +36,7 @@ The A0 inventory, the A4 baseline, is now `A0-INVENTORY.md`.
 | `lean/Walk/Basic.lean` | 335 | Sanity lemmas (below) |
 | `lean/Walk/Check.lean` | 138 | D1 and D2 on three chains, plus the `genFill` stream generator |
 | `lean/Walk/CheckRun.lean` | 6 | `#eval` runner; not a library root |
-| `docs/walk-spec/walk_diff.sh` | 16 | Runs all differential configurations |
+| `docs/walk-spec/walk_diff.sh` | 14 | Runs all differential configurations |
 
 **Book primitives: one per store call.**
 - `tBest` = `*_best`, `qFirst`, `levelCount`, `getAccount`.
