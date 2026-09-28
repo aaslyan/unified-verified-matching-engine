@@ -1,5 +1,33 @@
 # STATUS-v2
 
+## Phase 5 closing items
+
+**Date:** 2026-09-28. **Base commit:** `82eb6ba`.
+
+1. **postOnly dropped from the view** (STATUS below, route (ii); EVIDENCE §2): safe because a resting order's post-only flag is never read again on the path. `postOnly` is read only on the incoming order (`process`, `postOnlyCode`) and in a trade's `aggPostOnly`, which `tradeObs` drops.
+2. **Handwritten-engine divergence classes** (EVIDENCE §2). First divergence per seed over 6 configurations × 100 seeds: `capacity` 228, `qty > Qmax` 269, identical 103, no other class. The second class is a latent overflow in the handwritten engine: a level's 64-bit `total_qty` wraps (two resting 2^63 orders give 0) and `CheckInvariants` still passes. `tests/differential/total_overflow.c` demonstrates it and runs in `tests/differential/run.sh`. The generated matcher's Qmax check (`qty ≤ (2^64 − 1) / (capacity + 1)`) excludes it.
+3. **Semantics suite, validity-aware extension (5b)** (EVIDENCE §3b). `lean/Matcher/SemValid.lean` (exe `semvalid`, `GEN=semvalid tests/semantics/run.sh`) runs the model store alongside generation and emits a store call only when its contract precondition holds at that point. So every handle use is valid, and nothing is filtered.
+   - **Programs:** 4,000 (seeds 1–5 × 200 × capacities 0/1/3/7) × gcc -O0 / gcc -O2 / clang -O2 = 12,000 runs, **all identical** to `execStmt`, trap class included. Printer reparse 4,000/4,000.
+   - **Outcomes:** ok 1,332, overflow 1,721, trade buffer 586, loop bound 335, missing return 26.
+   - **Call-kind coverage:** all 34 kinds, each also inside the 1,332 completed programs. These are both pools' alloc/free, the seven order-field writes, the level-price write, hash find/insert/remove, queue insert-tail/remove/first/next, owner, find/insert/remove/best on both trees, order/level field reads, null tests on both handle types, and `&&`-guarded reads. Least-covered in completed programs: `asks_remove` 59, `read_level_price` 65, `bids_remove` 66.
+   - **Mismatch found: one, a generator bug, fixed.** Seed 3, capacity 3, program 122: `execStmt` gave `ok 111`, all three compilers gave `ok 5`. The model store reuses handle numbers, so a variable freed and then shadowed by a reallocation of the same number looked live to the generator. In C it was a use after free. Fix: a free kills every variable holding that handle until reassigned. After the fix, the whole run is clean. This supersedes the Phase 5 note that generated programs did not use the index operations.
+
+**Files**
+- Added: `lean/Matcher/SemValid.lean`, `lean/Matcher/SemTestMain.lean` (`semtest`'s `main`, moved so `SemValid` can import `SemTest`), `tests/differential/total_overflow.c`.
+- Changed:
+  - `lean/Matcher/SemTest.lean`: a `pur` flag for handle-free statements. The `semtest` output is unchanged.
+  - `lakefile.toml`: exe `semvalid`; `semtest` root.
+  - `tests/semantics/run.sh`: `GEN`.
+  - `tests/differential/run.sh`: runs `total_overflow`.
+  - `tests/run_all.sh`: the 5b run.
+  - `docs/plan-v2/EVIDENCE.md`.
+
+**Tests:** `lake build` clean, 0 `sorry`. Semantics: 4,000 + 4,000 programs green. Differential re-run with the overflow demo: green.
+
+**Next:** Phase 6, under its own plan.
+
+---
+
 ## Phase 5 — Evidence below the line
 
 **Date:** 2026-09-28. **Base commit:** `e7a28b3`. **Phase commit:** see `git log -- docs/plan-v2/EVIDENCE.md`.

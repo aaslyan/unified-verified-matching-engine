@@ -29,5 +29,10 @@ srcDir = "lean"
 
 [[lean_exe]]
 name = "semtest"
-root = "Matcher.SemTest"
+root = "Matcher.SemTestMain"
+srcDir = "lean"
+
+[[lean_exe]]
+name = "semvalid"
+root = "Matcher.SemValid"
 srcDir = "lean"

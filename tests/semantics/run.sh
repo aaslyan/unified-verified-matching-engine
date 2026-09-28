@@ -4,15 +4,19 @@
 # gcc -O0, gcc -O2 and clang -O2 with the printed C (Matcher.Print). The
 # outcome must agree exactly: the same value, order count and trades, or a trap
 # of the same class. Nothing is filtered.
-# Usage: tests/semantics/run.sh [seed] [programs] [capacity]
+# GEN=semvalid selects the validity-aware generator (lean/Matcher/SemValid.lean):
+# every store-call kind and the null-handle test, every handle use valid at
+# its point of use (Phase 5 extension 5b); the default is semtest (lean/Matcher/SemTest.lean).
+# Usage: [GEN=semtest|semvalid] tests/semantics/run.sh [seed] [programs] [capacity]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 seed="${1:-1}"; n="${2:-200}"; cap="${3:-3}"
 out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
 fail=0
 lake build Matcher.Print >/dev/null
-lake build semtest >/dev/null
-gen="$(.lake/build/bin/semtest "$seed" "$n" "$cap" "$out")"
+GEN="${GEN:-semtest}"
+lake build "$GEN" >/dev/null
+gen="$(.lake/build/bin/"$GEN" "$seed" "$n" "$cap" "$out")"
 echo "$gen"
 # printer check on every generated program: reparse its C, compare with its tree
 pr=0

@@ -8,3 +8,4 @@ echo "== differential"
 for cap in 2 8 64 1000000; do tests/differential/run.sh 1 100 300 "$cap"; done
 echo "== semantics"
 for cap in 0 1 3 7; do for seed in 1 2 3 4 5; do tests/semantics/run.sh "$seed" 200 "$cap"; done; done
+for cap in 0 1 3 7; do for seed in 1 2 3 4 5; do GEN=semvalid tests/semantics/run.sh "$seed" 200 "$cap"; done; done

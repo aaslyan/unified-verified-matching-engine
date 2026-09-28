@@ -88,19 +88,20 @@ partial def genU64 (d : Nat) (ord : Option Ident) : G Expr := do
     let op ← choose [BinOp.add, .add, .add, .add, .add, .add, .sub, .mul, .div]
     return .bin op (← genU64 (d - 1) ord) (← genU64 (d - 1) ord)
 
-partial def genBool (d : Nat) (ord : Option Ident) : G Expr := do
+partial def genBool (pur : Bool) (d : Nat) (ord : Option Ident) : G Expr := do
   match ← pick (if d = 0 then 4 else 8) with
   | 0 => return .blit ((← pick 2) = 0)
   | 1 => return .var "b0"
   | 2 | 3 => return .bin (← choose [BinOp.eq, .ne, .lt, .le]) (← genU64 1 ord) (← genU64 1 ord)
   | 4 =>
+    if pur then return .bin .le (← genU64 1 ord) (← genU64 1 ord) else
     -- a read through a handle, guarded by `&&`: short-circuit
     let o ← choose ["o0", "o1"]
     return .bin .and (.un .not (.isNullO (.var o)))
       (.bin (← choose [BinOp.lt, .le, .eq]) (.getO (.var o) (← choose u64Fields)) (← genU64 1 ord))
-  | 5 => return .bin .and (← genBool (d - 1) ord) (← genBool (d - 1) ord)
-  | 6 => return .bin .or (← genBool (d - 1) ord) (← genBool (d - 1) ord)
-  | _ => return .un .not (← genBool (d - 1) ord)
+  | 5 => return .bin .and (← genBool pur (d - 1) ord) (← genBool pur (d - 1) ord)
+  | 6 => return .bin .or (← genBool pur (d - 1) ord) (← genBool pur (d - 1) ord)
+  | _ => return .un .not (← genBool pur (d - 1) ord)
 
 -- ============================================================================
 -- Statements
@@ -142,11 +143,12 @@ def genLoopHead (cap : Nat) (i : Ident) : G (Bound × Expr) := do
 
 mutual
 
-partial def genStmt (cap : Nat) (d : Nat) (depth : Nat) (helpers : List Ident) : G Stmt := do
+partial def genStmt (pur : Bool) (cap : Nat) (d : Nat) (depth : Nat) (helpers : List Ident) : G Stmt := do
   match ← pick (if d = 0 then 5 else 12) with
   | 0 | 1 => return .assign (← choose u64Vars) (← genU64 2 none)
-  | 2 => return .assign "b0" (← genBool 2 none)
+  | 2 => return .assign "b0" (← genBool pur 2 none)
   | 3 =>
+    if pur then return .assign (← choose u64Vars) (← genU64 2 none) else
     -- a read through a handle, guarded by a null test
     let o ← choose ["o0", "o1"]
     return .ite (.isNullO (.var o)) (.assign (← choose u64Vars) (← genU64 1 none))
@@ -154,14 +156,14 @@ partial def genStmt (cap : Nat) (d : Nat) (depth : Nat) (helpers : List Ident) :
   | 4 =>
     if helpers.isEmpty then return .emit (← genU64 1 none) (← genU64 1 none) (← genU64 1 none) (← genU64 1 none)
     else return .call (some (← choose u64Vars)) (← choose helpers) [← genU64 1 none, ← genU64 1 none]
-  | 5 => genAlloc (← choose ["o0", "o1"])
+  | 5 => if pur then return .assign (← choose u64Vars) (← genU64 2 none) else genAlloc (← choose ["o0", "o1"])
   | 6 => return .emit (← genU64 1 none) (← genU64 1 none) (← genU64 1 none) (← genU64 1 none)
-  | 7 => return .ite (← genBool 2 none) (← genBlock cap (d - 1) depth helpers) (← genBlock cap (d - 1) depth helpers)
+  | 7 => return .ite (← genBool pur 2 none) (← genBlock pur cap (d - 1) depth helpers) (← genBlock pur cap (d - 1) depth helpers)
   | 8 | 10 =>
     if depth ≥ 2 then return .assign "x0" (← genU64 1 none) else
     let i := s!"i{depth}"
     let (bnd, n) ← genLoopHead cap i
-    let body ← genBlock cap (d - 1) (depth + 1) helpers
+    let body ← genBlock pur cap (d - 1) (depth + 1) helpers
     return blk [.assign i (.lit 0),
       .loop bnd (.bin .lt (.var i) n) (blk [body, .assign i (.bin .add (.var i) (.lit 1))])]
   | 9 =>
@@ -173,11 +175,11 @@ partial def genStmt (cap : Nat) (d : Nat) (depth : Nat) (helpers : List Ident) :
         (blk [.emit (.var i) (.lit 1) (.lit 2) (.lit 3), .assign i (.bin .add (.var i) (.lit 1))])]
   | _ => return .ret (← genU64 2 none)
 
-partial def genBlock (cap : Nat) (d : Nat) (depth : Nat) (helpers : List Ident) : G Stmt := do
+partial def genBlock (pur : Bool) (cap : Nat) (d : Nat) (depth : Nat) (helpers : List Ident) : G Stmt := do
   let n ← pick 4
   let mut ss := []
   for _ in [0:n + 1] do
-    ss := ss ++ [← genStmt cap d depth helpers]
+    ss := ss ++ [← genStmt pur cap d depth helpers]
   return blk ss
 
 end
@@ -187,8 +189,8 @@ def locals : List (Ident × Ty) :=
    ("o1", .order), ("i0", .u64), ("i1", .u64)]
 
 /-- A helper function `name(a, b)`; it may fall off its end. -/
-def genHelper (cap : Nat) (name : Ident) (earlier : List Ident) : G FunDef := do
-  let body ← genBlock cap 2 0 earlier
+def genHelper (pur : Bool) (cap : Nat) (name : Ident) (earlier : List Ident) : G FunDef := do
+  let body ← genBlock pur cap 2 0 earlier
   let fin ← if (← pick 6) = 0 then pure Stmt.skip else pure (Stmt.ret (← genU64 2 none))
   return { name := name, params := [("x0", .u64), ("x1", .u64)],
            locals := locals.filter (fun p => p.1 != "x0" && p.1 != "x1"), ret := .u64,
@@ -200,9 +202,9 @@ def genProgram (cap : Nat) : G Program := do
   let mut names : List Ident := []
   for k in [0:nh] do
     let name := s!"h{k}"
-    helpers := helpers ++ [← genHelper cap name names]
+    helpers := helpers ++ [← genHelper false cap name names]
     names := names ++ [name]
-  let body ← genBlock cap 3 0 names
+  let body ← genBlock false cap 3 0 names
   let fin ← if (← pick 10) = 0 then pure Stmt.skip else pure (Stmt.ret (← genU64 2 none))
   let main : FunDef := { name := "t_main", params := [], locals := locals, ret := .u64,
                          entry := true, body := blk [body, fin] }
@@ -230,24 +232,3 @@ def outcome (cap : Nat) (P : Program) : String :=
 
 end SemTest
 
-open SemTest in
-def main (args : List String) : IO UInt32 := do
-  let seed := (args.getD 0 "1").toNat!.toUInt64
-  let count := (args.getD 1 "100").toNat!
-  let cap := (args.getD 2 "3").toNat!
-  let dir := args.getD 3 "."
-  let mut x := seed * 2862933555777941757 + 3037000493 + cap.toUInt64 * 0x9E3779B97F4A7C15
-  let mut classes : List (String × Nat) := []
-  for k in [0:count] do
-    let (P, x') := (genProgram cap).run x
-    x := x'
-    IO.FS.writeFile s!"{dir}/prog{k}.c" (Matcher.Print.program P)
-    IO.FS.writeFile s!"{dir}/prog{k}.sexp" (AstDump.dump P)
-    let o := outcome cap P
-    IO.FS.writeFile s!"{dir}/prog{k}.exp" (o ++ "\n")
-    let cls := (o.splitOn " ").take 2 |> " ".intercalate
-    let cls := if o.startsWith "ok" then "ok" else cls
-    classes := if classes.any (·.1 == cls) then classes.map fun (c, n) => if c == cls then (c, n + 1) else (c, n)
-      else classes ++ [(cls, 1)]
-  IO.println s!"semtest: seed {seed}, {count} programs, cap {cap}; outcomes {classes}"
-  return 0

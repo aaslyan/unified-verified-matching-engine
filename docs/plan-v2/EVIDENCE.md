@@ -90,6 +90,10 @@ stream, which runs through three engines:
 **What is compared.** Only `Obs`, after every request: the result code, the
 trades (maker, taker, price, qty), and the book view (for each level, best
 first: price, then for each order id, remaining, qty, account and STP policy).
+The view has no post-only flag, and dropping it is safe: a resting order's
+post-only flag is never read again on the path (`postOnly` is read only on the
+incoming order, by `process` and `postOnlyCode`, and in a trade's
+`aggPostOnly`, which `tradeObs` drops).
 The oracle and the generated matcher must agree exactly on every step. The
 handwritten engine returns only a bool, so its comparison maps
 accepted/cancelled to true. It is compared up to its first divergence, which
@@ -129,6 +133,27 @@ recorded rather than failing the run. They are the two §4 rules the handwritten
 engine does not have:
 - `capacity`: at a full store, a LIMIT or a non-crossing POST_ONLY order is rejected by the generated matcher before any trade, while the handwritten engine rests it.
 - `qty > Qmax`: the v2 quantity bound; the handwritten engine accepts any quantity.
+
+Over the 6 configurations × 100 seeds (600 seed-runs), the first divergence
+per seed falls in:
+
+| Class | Seed-runs |
+|---|---|
+| `capacity` | 228 |
+| `qty > Qmax` | 269 |
+| none: identical on the whole stream | 103 |
+
+No seed diverged in any other class.
+
+**The second class is a latent overflow in the handwritten engine.** A level's
+`total_qty` is a 64-bit sum of its orders' remaining quantities. Without the
+Qmax bound, two resting 2^63 orders at one price make it wrap to 0, and
+`MatchingEngine_CheckInvariants` still passes, since its own sum wraps too.
+`tests/differential/total_overflow.c` demonstrates this; it runs as part of
+`tests/differential/run.sh` and reports `level total_qty = 0 (true sum 2^64);
+CheckInvariants: 1`. The generated matcher cannot reach this state: its Qmax
+check (`qty ≤ Qmax = (2^64 − 1) / (capacity + 1)`) rejects any order whose quantity could
+take a level total past 2^64 − 1, so both orders are rejected there.
 
 With the over-Qmax quantities left out (profile `noqmax`) and a store that
 never fills, the handwritten engine agrees with the spec on every step of all
@@ -194,6 +219,75 @@ over 2^64 − 2 iterations; the run was killed. The overflow edge is now taken
 relative to the capacity (`k = 2^64 − capacity` and `2^64 − 1`, for capacity ≥ 1).
 All numbers above are from after the fix.
 
+### 3b. Validity-aware extension (all store-call kinds)
+
+**Method.** `lean/Matcher/SemValid.lean` (built as `semvalid`, selected with
+`GEN=semvalid tests/semantics/run.sh`) emits programs that use every kind of
+store call and the null-handle test, with every handle use valid at its point
+of use. The generator runs the model store `AbsStore cap` alongside the
+program, and updates it with the same `EngineDb` functions `runExt` uses. It
+emits a call only when the call's contract precondition holds in the model at
+that point. Invalid programs are never generated, so nothing is filtered: every
+emitted program is run and compared, exactly as in §3 (same harness, same
+compilers, same outcome comparison, trap class included, printer reparse
+included). Pure statements from §3 (arithmetic, branches, bounded loops,
+trade emission, helper calls) are interleaved, so programs also trap.
+
+**Run.** `GEN=semvalid tests/semantics/run.sh <seed> 200 <cap>`, seeds 1–5,
+capacities 0, 1, 3 and 7.
+
+| Measure | Value |
+|---|---|
+| Distinct programs | 4,000 |
+| Compiled runs (× 3 configurations) | 12,000 |
+| Agree with `execStmt` | **all 12,000** (gcc -O0, gcc -O2, clang -O2: 4,000/4,000 each) |
+| Printer reparse | 4,000 of 4,000 identical |
+| Filtered | none |
+
+| Semantic outcome | Programs |
+|---|---|
+| ok | 1,332 |
+| trap 1: overflow or zero divisor | 1,721 |
+| trap 3: trade buffer full | 586 |
+| trap 2: loop bound | 335 |
+| trap 4: missing return | 26 |
+
+**Call-kind coverage.** All 34 kinds occur. "Emitted" counts calls in all
+4,000 programs; "completed" counts calls in the 1,332 programs that ran to the
+end, so every one of those was executed. `capacity` and `count` reads occur
+in the interleaved pure expressions and are not counted here. At capacity 0
+every allocation fails, so those programs cover only allocation, finds, bests,
+null tests and guarded reads.
+
+| Kind | Emitted | Completed |
+|---|---|---|
+| `order_alloc` / `order_free` | 22,757 / 3,158 | 7,055 / 1,116 |
+| `level_alloc` / `level_free` | 11,305 / 1,675 | 3,501 / 591 |
+| `order_set_` id / account / side / stp_mode | 1,004 / 1,072 / 1,088 / 1,088 | 389 / 360 / 400 / 373 |
+| `order_set_` price / qty / remaining | 1,132 / 996 / 1,137 | 400 / 355 / 387 |
+| `level_set_price` | 2,002 | 673 |
+| `hash_find` / `hash_insert` / `hash_remove` | 11,401 / 696 / 281 | 3,523 / 275 / 109 |
+| `queue_insert_tail` / `queue_remove` | 1,811 / 576 | 628 / 197 |
+| `queue_first` / `queue_next` | 2,384 / 697 | 759 / 237 |
+| `order_owner` | 3,759 | 1,323 |
+| `bids_find` / `bids_insert` / `bids_remove` / `bids_best` | 5,643 / 465 / 225 / 5,637 | 1,792 / 135 / 66 / 1,701 |
+| `asks_find` / `asks_insert` / `asks_remove` / `asks_best` | 5,638 / 422 / 187 / 5,736 | 1,732 / 119 / 59 / 1,745 |
+| order field read / level price read / level count read | 972 / 197 / 1,212 | 336 / 65 / 416 |
+| null test, order / level | 6,843 / 6,691 | 2,135 / 2,056 |
+| `&&`-guarded read through a possibly-null handle | 6,522 | 1,974 |
+
+**Mismatch found and fixed (a generator bug).** The first full run had one
+mismatch: seed 3, capacity 3, program 122. `execStmt` returned
+`ok 111 0 [1,19,2,0]`, and all three compilers returned `ok 5 0 [1,19,2,0]`.
+The program freed `o2`, then allocated `o3`, then read through `o2`. The
+model store reuses handle numbers, so `o3` got o2's old number, and the
+generator's liveness check (is the variable's handle number live?) accepted
+the stale `o2`, which in the model aliased o3's row. In C, `o2` is a dangling
+pointer. This was a use after free that the generator believed valid, not a
+semantics or compiler disagreement. Fix: on a free, every variable holding that
+handle is dead until reassigned, whatever later allocations reuse. All numbers
+above are from after the fix; seed 3 at capacity 3 now agrees on all 200.
+
 ## 4. Printer (`tests/printer/`)
 
 **Method.** `reparse.py` parses the printed C with pycparser. It first runs
@@ -212,7 +306,7 @@ diffs the two.
 
 **Results.**
 - `c/gen/matcher.c`: reparses to the tree of `lean/Matcher/Program.lean` (5 functions).
-- Every random program of the semantics test: 4,000 of 4,000 identical.
+- Every random program of the semantics test: 4,000 of 4,000 identical; of the validity-aware extension (§3b): 4,000 of 4,000.
 - Sensitivity: changing one `<=` to `<` in `matcher.c`, or one loop's trap class, is reported: a tree difference in the first case, not the printer's language in the second.
 
 ## Summary
@@ -222,4 +316,5 @@ diffs the two.
 | Contract | 1.8M operations, 12 configurations | all laws hold |
 | Differential | 180,000 steps, 6 configurations | oracle = generated on every step |
 | Semantics | 4,000 programs × 3 compilers | 12,000 of 12,000 identical outcomes, trap class included; nothing filtered |
+| Semantics, validity-aware (all 34 store-call kinds, null tests) | 4,000 programs × 3 compilers | 12,000 of 12,000 identical outcomes; nothing filtered |
 | Printer | `matcher.c` + every semantics program | identical trees |
