@@ -36,3 +36,8 @@ srcDir = "lean"
 name = "semvalid"
 root = "Matcher.SemValid"
 srcDir = "lean"
+
+[[lean_lib]]
+name = "Walk"
+srcDir = "lean"
+roots = ["Walk.Spec", "Walk.Basic", "Walk.Check"]
