@@ -1,6 +1,6 @@
 name = "unified_verified_matching_engine"
 version = "0.1.0"
-defaultTargets = ["UnifiedVerifiedMatchingEngine"]
+defaultTargets = ["UnifiedVerifiedMatchingEngine", "Walk"]
 
 [[require]]
 name = "Amcc"
@@ -40,4 +40,4 @@ srcDir = "lean"
 [[lean_lib]]
 name = "Walk"
 srcDir = "lean"
-roots = ["Walk.Spec", "Walk.Basic", "Walk.Check"]
+globs = ["Walk.+"]

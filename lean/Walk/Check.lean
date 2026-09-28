@@ -21,7 +21,7 @@ Streams: `MatcherCheck.genReq` (the Phase 3 generator, unchanged) and
 `genFill` below, which rests mostly non-crossing LIMIT orders, so the book
 reaches capacity and the pessimistic capacity reject is exercised.
 
-`MatcherCheck` defines `main`, so this module cannot; `lean/Walk/CheckRun.lean`
+`MatcherCheck` defines `main`, so this module cannot; `docs/walk-spec/CheckRun.lean`
 runs `Walk.Check.runIO` under `#eval`, parameters from the environment.
 -/
 
