@@ -103,15 +103,17 @@ def levelsUsed (b : BookState) : Nat := b.bids.length + b.asks.length
 def hashFind (b : BookState) (id : Nat) : Option Order :=
   (allBookOrders b).find? (·.id = id)
 
-/-- `ME_order_owner(ord)`: the tree and level whose queue holds `o`. -/
+/-- `ME_order_owner(ord)`: the tree and level whose queue holds `o`. A handle
+    names one order; on the Book an order is named by its id, which the hash
+    keeps unique. -/
 def owner (b : BookState) (o : Order) : Option (Tree × PriceLevel) :=
-  match b.bids.find? (·.orders.contains o) with
+  match b.bids.find? (fun l => l.orders.any (·.id = o.id)) with
   | some l => some (.bids, l)
-  | none => (b.asks.find? (·.orders.contains o)).map (.asks, ·)
+  | none => (b.asks.find? (fun l => l.orders.any (·.id = o.id))).map (.asks, ·)
 
 /-- `ME_queue_remove(lvl, ord)`, `lvl` the level at price `p` of tree `t`. -/
 def qRemove (b : BookState) (t : Tree) (p : Nat) (o : Order) : BookState :=
-  setSideL b t (modAt p (fun l => { l with orders := l.orders.erase o }) (sideL b t))
+  setSideL b t (modAt p (fun l => { l with orders := l.orders.eraseP (·.id = o.id) }) (sideL b t))
 
 /-- `ME_queue_remove(lvl, ord)` for the order just appended at the tail. -/
 def qRemoveTail (b : BookState) (t : Tree) (p : Nat) : BookState :=
@@ -276,13 +278,17 @@ def rest (c : Ctx) (st : State) : ResultCode × BookState :=
         else (.accepted, b2)
   else (.accepted, st.book)
 
+/-- The post-only test's book part (C:89-90): `best = ME_*_best()`, then
+    `best ≠ NULL ∧ crosses(get_price(best))`. -/
+def postOnlyCross (c : Ctx) (b : BookState) : Bool :=
+  match tBest b c.contra with
+  | some best => c.crosses best.price
+  | none => false
+
 /-- `gen_process_buy` / `gen_process_sell`. -/
 def sideProc (c : Ctx) (b : BookState) : Option (ResultCode × ProcessResult) :=
-  let postOnlyRejected :=
-    c.r.orderType = 3 ∧ (match tBest b c.contra with
-      | some best => c.crosses best.price
-      | none => false) = true
-  if postOnlyRejected then some (.rejectedPostOnly, { book := b, trades := [] })
+  if c.r.orderType = 3 ∧ postOnlyCross c b = true then
+    some (.rejectedPostOnly, { book := b, trades := [] })
   else do
     let n ← c.bound
     let st ← outerRun c n { book := b, rem := c.r.qty.toNat, stop := false, trades := [] }
@@ -345,82 +351,82 @@ folded into the primitive of the call before them.
 
 | C | statement | Lean |
 |---|---|---|
-| 109 | loop test `passive ≠ NULL ∧ 0 < rem` (`passive` = head of `best`) | 178-179 `innerTest` |
-| 110 | `me_k1 == me_n1 → me_trap(2)` | 216 `innerRun 0` → `none` |
-| 111 | STP test: `account ≠ 0 ∧ account = get_account(passive) ∧ stp ≠ NONE` | 183-189 (`tBest`, `qFirst`, `getAccount`) |
-| 112-113 | `CANCEL_NEW`: `rem = 0` | 190-191 |
-| 115 | `CANCEL_OLD ∨ CANCEL_BOTH` | 192 |
-| 116-120 | `victim = passive; passive = next; queue_remove; hash_remove; order_free` | 193 `popHead` |
-| 121-122 | `CANCEL_BOTH`: `rem = 0` | 194-195 |
-| 126 | `fill = min(rem, get_remaining(passive))` | 197 |
-| 127 | `rem = me_sub(rem, fill)` | 198 |
-| 128 | `prem = me_sub(get_remaining(passive), fill)` | 199 |
-| 129 | `set_remaining(passive, prem)` | 200 `setHeadRem` |
+| 109 | loop test `passive ≠ NULL ∧ 0 < rem` (`passive` = head of `best`) | 180-181 `innerTest` |
+| 110 | `me_k1 == me_n1 → me_trap(2)` | 218 `innerRun 0` → `none` |
+| 111 | STP test: `account ≠ 0 ∧ account = get_account(passive) ∧ stp ≠ NONE` | 185-191 (`tBest`, `qFirst`, `getAccount`) |
+| 112-113 | `CANCEL_NEW`: `rem = 0` | 192-193 |
+| 115 | `CANCEL_OLD ∨ CANCEL_BOTH` | 194 |
+| 116-120 | `victim = passive; passive = next; queue_remove; hash_remove; order_free` | 195 `popHead` |
+| 121-122 | `CANCEL_BOTH`: `rem = 0` | 196-197 |
+| 126 | `fill = min(rem, get_remaining(passive))` | 199 |
+| 127 | `rem = me_sub(rem, fill)` | 200 |
+| 128 | `prem = me_sub(get_remaining(passive), fill)` | 201 |
+| 129 | `set_remaining(passive, prem)` | 202 `setHeadRem` |
 | 130, 137 | `nextp = queue_next(passive)`; `passive = nextp` | derived (head of `best`) |
-| 131-134 | `prem = 0`: `queue_remove; hash_remove; order_free` | 201 `popHead` |
-| 141 | `fill = min(rem, get_remaining(passive))` | 204 |
-| 142 | `rem = me_sub(rem, fill)` | 205 |
-| 143 | `prem = me_sub(get_remaining(passive), fill)` | 206 |
-| 144 | `set_remaining(passive, prem)` | 207 `setHeadRem` |
-| 145 (39-43) | `me_emit(get_id(passive), id, get_price(best), fill)`; buffer full → `me_trap(3)` | 208-209, 212 `mkTrade` |
+| 131-134 | `prem = 0`: `queue_remove; hash_remove; order_free` | 203 `popHead` |
+| 141 | `fill = min(rem, get_remaining(passive))` | 206 |
+| 142 | `rem = me_sub(rem, fill)` | 207 |
+| 143 | `prem = me_sub(get_remaining(passive), fill)` | 208 |
+| 144 | `set_remaining(passive, prem)` | 209 `setHeadRem` |
+| 145 (39-43) | `me_emit(get_id(passive), id, get_price(best), fill)`; buffer full → `me_trap(3)` | 210-211, 214 `mkTrade` |
 | 146, 153 | `nextp = queue_next(passive)`; `passive = nextp` | derived |
-| 147-150 | `prem = 0`: `queue_remove; hash_remove; order_free` | 210 `popHead` |
+| 147-150 | `prem = 0`: `queue_remove; hash_remove; order_free` | 212 `popHead` |
 
 ### Outer iteration (`outerStep`, C:98-162) and the loops
 
 | C | statement | Lean |
 |---|---|---|
-| 97, 108 | bound `me_add(ME_capacity(), 1)` (`me_trap(1)` on overflow) | 156-157 `Ctx.bound`; 229 |
-| 98 | loop test `0 < rem ∧ ¬stop` | 220 `outerTest` |
-| 99 | `me_k0 == me_n0 → me_trap(2)` | 240 `outerRun 0` → `none` |
-| 100 | `best = ME_asks_best()` | 224 `tBest` |
-| 101-102 | `best == NULL`: `stop = true` | 225 |
-| 104-105 | `otype ≠ MARKET ∧ ¬(get_price(best) ≤ price)`: `stop = true` | 227 (`Ctx.crosses`, 152-154) |
+| 97, 108 | bound `me_add(ME_capacity(), 1)` (`me_trap(1)` on overflow) | 158-159 `Ctx.bound`; 231 |
+| 98 | loop test `0 < rem ∧ ¬stop` | 222 `outerTest` |
+| 99 | `me_k0 == me_n0 → me_trap(2)` | 242 `outerRun 0` → `none` |
+| 100 | `best = ME_asks_best()` | 226 `tBest` |
+| 101-102 | `best == NULL`: `stop = true` | 227 |
+| 104-105 | `otype ≠ MARKET ∧ ¬(get_price(best) ≤ price)`: `stop = true` | 229 (`Ctx.crosses`, 154-155) |
 | 107 | `passive = ME_queue_first(best)` | derived (`qFirst`) |
-| 108-155 | the inner loop | 230 `innerRun` |
-| 156 | `get_count(best) == 0` (`best` still the head level) | 232-234 `levelCount` |
-| 157-158 | `ME_asks_remove(best); ME_level_free(best)` | 234 `dropBest` |
+| 108-155 | the inner loop | 232 `innerRun` |
+| 156 | `get_count(best) == 0` (`best` still the head level) | 234-236 `levelCount` |
+| 157-158 | `ME_asks_remove(best); ME_level_free(best)` | 236 `dropBest` |
 
 ### Matching phase (`sideProc`, C:88-96, 164-205) and rest (`rest`)
 
 | C | statement | Lean |
 |---|---|---|
-| 88-93 | post-only: `best = ME_asks_best()`; crossing → `return 6` | 281-285 |
-| 96 | `rem = qty` | 288 |
-| 97-163 | outer loop | 288 `outerRun` |
-| 164 | `0 < rem ∧ otype ≠ IOC ∧ otype ≠ MARKET` | 256 |
-| 165-167 | `ord = ME_order_alloc()`; `NULL` (iff `capacity ≤ count`) → `return 5` | 257 `count` |
-| 170-176 | `ME_order_set_{id,account,side,stp_mode,price,qty,remaining}` | 259 `restOrder` (245-252) |
-| 177 | `lvl = ME_bids_find(price)` | 262 `tFind` |
-| 179-182 | `ME_level_alloc()`; `NULL` (iff `capacity ≤ levelsUsed`) → `order_free; return 5` | 265, 268 `levelsUsed` |
-| 185-187 | `level_set_price; ME_bids_insert; isnew = true` | 266 `tInsertNew` |
-| 190 | `ME_queue_insert_tail(lvl, ord)` | 270 `qInsertTail` |
-| 191 | `ok = ME_hash_insert(ord)` (fails iff the id is hashed) | 271 `hashFind` |
-| 193 | `ME_queue_remove(lvl, ord)` | 272 `qRemoveTail` |
-| 194-196 | `isnew ∧ get_count(lvl) = 0`: `ME_bids_remove; ME_level_free` | 273-274 `tRemove` |
-| 199-200 | `order_free; return 4` | 275 |
-| 205 | `return 0` | 276-277 |
+| 88-93 | post-only: `best = ME_asks_best()`; crossing → `return 6` | 283-286 `postOnlyCross`, 290-291 |
+| 96 | `rem = qty` | 294 |
+| 97-163 | outer loop | 294 `outerRun` |
+| 164 | `0 < rem ∧ otype ≠ IOC ∧ otype ≠ MARKET` | 258 |
+| 165-167 | `ord = ME_order_alloc()`; `NULL` (iff `capacity ≤ count`) → `return 5` | 259 `count` |
+| 170-176 | `ME_order_set_{id,account,side,stp_mode,price,qty,remaining}` | 261 `restOrder` (247-254) |
+| 177 | `lvl = ME_bids_find(price)` | 264 `tFind` |
+| 179-182 | `ME_level_alloc()`; `NULL` (iff `capacity ≤ levelsUsed`) → `order_free; return 5` | 267, 270 `levelsUsed` |
+| 185-187 | `level_set_price; ME_bids_insert; isnew = true` | 268 `tInsertNew` |
+| 190 | `ME_queue_insert_tail(lvl, ord)` | 272 `qInsertTail` |
+| 191 | `ok = ME_hash_insert(ord)` (fails iff the id is hashed) | 273 `hashFind` |
+| 193 | `ME_queue_remove(lvl, ord)` | 274 `qRemoveTail` |
+| 194-196 | `isnew ∧ get_count(lvl) = 0`: `ME_bids_remove; ME_level_free` | 275-276 `tRemove` |
+| 199-200 | `order_free; return 4` | 277 |
+| 205 | `return 0` | 278-279 |
 
 ### Entry points (`processOrder`, C:362-416; `cancel`, C:418-453)
 
 | C | statement | Lean |
 |---|---|---|
-| 374-375 | `me_ntrades = 0; ME_trade_reset()` | `trades := []` (288, 297) |
-| 376-377 | order type not LIMIT/MARKET/IOC/POST_ONLY → `return 2` | 301-302 |
-| 380-381 | side out of range → `return 3` | 303 |
-| 384-385 | STP mode out of range → `return 3` | 304-305 |
-| 388-389 | `qty == 0` → `return 3` | 306 |
-| 392-393 | `otype ≠ MARKET ∧ price == 0` → `return 3` | 307 |
-| 396-397 | `me_add` traps; `qmax < qty` → `return 3` | 308, 309 |
-| 400-402 | `ME_hash_find(id) ≠ NULL` → `return 4` | 310 `hashFind` |
-| 405-406 | `(LIMIT ∨ POST_ONLY) ∧ capacity ≤ ME_order_count()` → `return 5` | 311 `count` |
-| 409-414 | dispatch on side | 312 |
-| 428-430 | `ord = ME_hash_find(id)`; `NULL` → `return 7` | 316-317 `hashFind` |
-| 433-435 | `lvl = ME_order_owner(ord)`; `NULL` → `return 7` | 319-320 `owner` |
-| 438 | `side = get_side(ord)` | 322 |
-| 439-441 | `queue_remove(lvl, ord); hash_remove; order_free` | 323 `qRemove` |
-| 442-448 | `get_count(lvl) == 0`: remove from the tree of `side`; `level_free` | 324-327 `tRemove` |
-| 451 | `return 1` | 328 |
+| 374-375 | `me_ntrades = 0; ME_trade_reset()` | `trades := []` (294, 303) |
+| 376-377 | order type not LIMIT/MARKET/IOC/POST_ONLY → `return 2` | 307-308 |
+| 380-381 | side out of range → `return 3` | 309 |
+| 384-385 | STP mode out of range → `return 3` | 310-311 |
+| 388-389 | `qty == 0` → `return 3` | 312 |
+| 392-393 | `otype ≠ MARKET ∧ price == 0` → `return 3` | 313 |
+| 396-397 | `me_add` traps; `qmax < qty` → `return 3` | 314, 315 |
+| 400-402 | `ME_hash_find(id) ≠ NULL` → `return 4` | 316 `hashFind` |
+| 405-406 | `(LIMIT ∨ POST_ONLY) ∧ capacity ≤ ME_order_count()` → `return 5` | 317 `count` |
+| 409-414 | dispatch on side | 318 |
+| 428-430 | `ord = ME_hash_find(id)`; `NULL` → `return 7` | 322-323 `hashFind` |
+| 433-435 | `lvl = ME_order_owner(ord)`; `NULL` → `return 7` | 325-326 `owner` |
+| 438 | `side = get_side(ord)` | 328 |
+| 439-441 | `queue_remove(lvl, ord); hash_remove; order_free` | 329 `qRemove` |
+| 442-448 | `get_count(lvl) == 0`: remove from the tree of `side`; `level_free` | 330-333 `tRemove` |
+| 451 | `return 1` | 334 |
 -/
 
 end Walk

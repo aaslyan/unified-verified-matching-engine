@@ -1,128 +1,173 @@
-# Walk-spec STATUS — Phase A1 (the walk: executable, differential)
+# Walk-spec STATUS — Phase A2 (equivalence with the reference)
 
-Commit: see `git log -1 -- docs/walk-spec/STATUS-W.md`   Branch: walk-spec   lake build: clean (default target, 102 jobs; `lake build Walk`, 28 jobs), before and after   sorry count under lean/Walk: 0
+Commit: see `git log -1 -- docs/walk-spec/STATUS-W.md`   Branch: walk-spec   lake build: clean (default target, now including `Walk`: 110 jobs), before and after   sorry count under lean/Walk: 0
 
-The A0 inventory, the A4 baseline, is now `A0-INVENTORY.md`.
+**`Walk.process_obs_eq` is proved** (`lean/Walk/Equiv.lean`). On a `WF` book the walking spec does not trap, and its `obsSpec` equals `processB`'s. Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 
-**Summary:**
-- `Walk.process` exists and is transliterated from `c/gen/matcher.c`, with a C line ↔ Lean line table.
-- Fuel sufficiency is proved.
-- Both differentials report 0 mismatches over 144,000 steps. Every result code was hit, and the pessimistic capacity reject was exercised 10,279 times.
-- No change to the program was needed or made.
+The stronger `Walk.process_agree` gives:
+- the same result code;
+- the trades as reference `Trade`s, equal element for element;
+- the book equal to `processB`'s up to `nB`, the view as a spec object.
 
-## A0 decisions (Ara, recorded)
+Step 3 (one walk step against one reference step) was not blocked. It went through in this session, in the order asked: entry checks and cancel, then fuel, then the step.
 
-1. The walk is nested: `innerStep`/`outerStep`, `innerRun`/`outerRun`.
-2. The A3 relation holds up to `bookView`, plus the two derived-local clauses (`best` = head contra level, `passive` = its head order).
-3. A2 is stated as equality of `obsSpec`.
-4. A2 may import the spec-only lemmas of `Matcher/SpecStep.lean`. They count as shared, and every use is listed here and in A4. **None were used in A1.**
-5. `run` returns `Option`: `none` means the bound was exhausted with the test still true. Fuel sufficiency is a theorem.
-6. `stopX`: the walk states its own exit clause and reuses `stopX_of_best` (A3).
-7. One `lakefile.toml` entry for the `Walk` library (below).
+## Ara's A1 decisions, carried out
 
-**Addition to A4 (Ara):**
-- For every lemma in the comparison table, on both routes, split its lines into three categories:
-  - **store-side:** `InvM` preservation, frame, count and handle facts;
-  - **spec-relation:** the clause or lemma that ties store state to the reference;
-  - **glue:** statement evaluation, dispatch, assembly.
-- Report the split per route and in total.
-- List which store operations recur in the most branches. Popping one resting order is three contract calls (`queue_remove`, `hash_remove`, `order_free`).
+1. **`Walk` is in `defaultTargets`.** `lakefile.toml` now has exactly two edits outside `lean/Walk/` and `docs/walk-spec/`:
+   - the `[[lean_lib]] name = "Walk"` entry, now `globs = ["Walk.+"]`;
+   - `"Walk"` added to `defaultTargets`.
+
+   The `#eval` runner moved to `docs/walk-spec/CheckRun.lean` so the glob does not build it.
+2. **No `walk_oracle`.** It is kept as an A4 option.
+3. **Planted-bug check.** `MUTANT=1|2 docs/walk-spec/walk_diff.sh` plants the mutant in `lean/Walk/Spec.lean`, runs `genReq` seed 7, 40 × 60, cap 6, and succeeds only if the differential fails. It refuses to run on a modified `Spec.lean` and restores the file on exit.
+
+   | Mutant | Change | Where | Caught by |
+   |---|---|---|---|
+   | 1 | `CANCEL_BOTH` does not zero `rem` | `innerStep`, the `stpMode = 3` line (C:121-122; currently Spec.lean:196) | D1 (14 mismatches) and D2 (14) |
+   | 2 | the level cleanup never fires (`levelCount best' = 7`) | `outerStep` (C:156; currently Spec.lean:236) | D1 (11) and D2 (11); 29 traps (`me_trap(2)`: bound exhausted on the undropped empty level) |
+
+   The script prints the line it changed, so the record follows the file.
+4. **Phase 3 capacity coverage:** recorded under Findings, as a note for `main`'s EVIDENCE.md, not a change on this branch.
 
 ## Done
 
-| File | Lines | What |
+| File | Lines | Contents |
 |---|---|---|
-| `lean/Walk/Spec.lean` | 426 (335 + 91-line table) | Book primitives, `Ctx`, `State`, `innerTest`/`innerStep`/`innerRun`, `outerTest`/`outerStep`/`outerRun`, `restOrder`/`rest`, `sideProc`, `processOrder`, `cancel`, `process`; the C line ↔ Lean line table at the end |
-| `lean/Walk/Basic.lean` | 335 | Sanity lemmas (below) |
-| `lean/Walk/Check.lean` | 138 | D1 and D2 on three chains, plus the `genFill` stream generator |
-| `lean/Walk/CheckRun.lean` | 6 | `#eval` runner; not a library root |
-| `docs/walk-spec/walk_diff.sh` | 14 | Runs all differential configurations |
+| `lean/Walk/EquivEntry.lean` | 444 | `WF`; `Agree`; `processOrder_eq`, `processOrder_entry` (the entry checks); `walkRemove_eq`, `cancel_eq` (cancel) |
+| `lean/Walk/EquivMatch.lean` | 680 | `normC`, `CO`, `IR`; `conflict_iff`, `policy_of`, `canMatch_iff`, `mkTrade_eq`; **`step_sim`**; `innerStep_frame`; `inner_sim`; `OW`, `outerStep_OW`, `outer_sim` |
+| `lean/Walk/Equiv.lean` | 417 | rest-block lemmas (`modAt_eq_map`, `modAt_insLevel`, `nO_restOrder`, `rest_found`/`rest_fresh`/`rest_none`); `mr_eq`, `postOnly_iff`; `sideProc_agree`; **`process_agree`**, **`process_obs_eq`** |
 
-**Book primitives: one per store call.**
-- `tBest` = `*_best`, `qFirst`, `levelCount`, `getAccount`.
-- `setHeadRem` = `order_set_remaining` on the head order.
-- `popHead` = `queue_remove` + `hash_remove` + `order_free` of the head.
-- `dropBest` = `*_remove` + `level_free` of the best level.
-- `count`, `levelsUsed`, `hashFind`, `owner`, `qRemove`, `qRemoveTail`, `tRemove`, `tFind`.
-- `tInsertNew` = `level_alloc` + `level_set_price` + `*_insert`.
-- `qInsertTail`.
-- All are total list functions on the reference `BookState`, reached through `sideL`/`setSideL` indexed by the contract's `Tree`.
+### 1. Entry checks and cancel
 
-**`Basic.lean`, no `sorry`, axioms `propext` and `Quot.sound` only:**
-- `innerStep_shape`: one inner iteration changes only the head level. Either `rem = 0`, or the head order is gone and at most one trade was emitted.
-- `innerStep_isSome`: an inner iteration traps only on a full trade buffer.
-- `innerStep_progress`: an inner iteration whose test holds either sets `rem = 0` or removes exactly one contra order.
-- `innerRun_exit`/`outerRun_exit`, `innerRun_stable`/`outerRun_stable`: a loop whose test is false returns its state, and more fuel than a finished run used changes nothing.
-- `innerRun_ok`, `outerRun_ok`: at bound `cap + 1`, neither loop exhausts its bound and the emit buffer never fills. The potential is `trades.length + contra orders ≤ cap` while `rem > 0`.
-- **`run_fuel_sufficient`:** `cap + 1 < 2^64`, `count b ≤ cap` and no empty level together imply `(Walk.process cap b req).isSome`.
+- **`processOrder_entry`.** Every entry rejection gives exactly `processB`'s result. An order that passes the checks runs `sideProc` where `processB` runs `(postOnlyCode o b, processWithId b o)`.
+  - It uses `main`'s `processB_static` and `processB_after_static` for the request-only checks.
+  - It uses `hashFind_isSome` (the walk's `hashFind` is `idOnBook`) and `count_eq_bookSize` (the two counts agree on a stop-free book).
+- **`cancel_eq`.** `Walk.cancel b id = processB cap b (.cancel id)`, **exactly**, not only through the view.
+  - The core is `walkRemove_eq`: `modAt`/`eraseP` followed by the conditional `eraseP` of the emptied level equals `removeLevelOrder`.
+  - It holds on a side with distinct prices, no empty level and unique ids. The proof splits the side at the owner level as `A ++ l :: B`.
 
-**Differentials: 0 mismatches and 0 traps everywhere.** Three chains (`processB`, `Walk.process`, and the matcher on the model store) are stepped on the same stream. Each feeds its own output state to its next step.
+### 2. Fuel
 
-| Stream | Seed | Streams × length | Cap | Steps | D1 (walk vs `processB`) | D2 (matcher vs walk) | Pessimistic capacity rejects |
-|---|---|---|---|---|---|---|---|
-| `genReq` (Phase 3) | 7 | 400 × 60 | 2 | 24,000 | 0 | 0 | 2,571 |
-| `genReq` | 7 | 400 × 60 | 6 | 24,000 | 0 | 0 | 1,254 |
-| `genReq` | 7 | 400 × 60 | 20 | 24,000 | 0 | 0 | 0 |
-| `genReq` | 7 | 400 × 60 | 1 | 24,000 | 0 | 0 | 2,288 |
-| `genFill` | 11 | 200 × 60 | 1 | 12,000 | 0 | 0 | 1,061 |
-| `genFill` | 11 | 200 × 60 | 2 | 12,000 | 0 | 0 | 1,431 |
-| `genFill` | 11 | 200 × 60 | 6 | 12,000 | 0 | 0 | 1,312 |
-| `genFill` | 11 | 200 × 60 | 20 | 12,000 | 0 | 0 | 362 |
-| **Total** | | | | **144,000** | **0** | **0** | **10,279** |
+- The walk's fuel `cap + 1` suffices: `outerRun_ok` (A1).
+- The reference is taken at its own fuel through `rest_start`, via `mr_eq` and `computeMatchFuel_gt_matchMeasure`. That is `main`'s `doMatch_fuel_stable`, through `SpecStep`.
+- So the two loops are related at sufficient fuel on both sides, and no fuel equation is needed.
 
-- All eight result codes appear (0–7; see the `genReq` cap 2 and cap 6 rows).
-- A pessimistic reject is a code-5 result on a marketable request, meaning a MARKET order or a contra best that crosses.
-- **Harness check:** two deliberately wrong transliterations were caught at once by both D1 and D2, then reverted. The two bugs were: `CANCEL_BOTH` not zeroing `rem`, and the level cleanup never firing.
-- Run with `docs/walk-spec/walk_diff.sh`, about 45 s.
+### 3. One walk step is one reference step: `step_sim`
+
+At head level `L :: R` with head order `p :: os`, one `innerStep` and one `doMatch` call keep the reference's remaining computation (`MatcherSpec.rest`).
+- **Six branches:** `CANCEL_NEW`, `CANCEL_BOTH`, `CANCEL_OLD`, decrement (full or partial), fill (full or partial).
+- **Each branch uses the matching `MatcherSpec.step_*` lemma,** closed by `rest_step` (measure `mm_drop1`) or `rest_step_done`.
+- **The bridging facts** say the request's tests are the reference's:
+  - `conflict_iff`: the walk's STP test is `selfTradeConflict`;
+  - `policy_of`: the STP mode maps to `stpPolicy`;
+  - `canMatch_iff`: the price test is `canMatchPrice`;
+  - `mkTrade_eq`: `mkTrade` is `fillTrade`.
+
+The two sides differ only in bookkeeping, and `step_sim` states exactly these three differences:
+
+| | Walk | Reference | Stated by |
+|---|---|---|---|
+| (a) An emptied level | kept until the outer cleanup | dropped in the same call | `normC`: the reference's contra side is `normC` of the walk's |
+| (b) Cancelling the incoming order | `rem := 0` | `status := cancelled` | `IR` (`rem = 0 → done`; `rem > 0 → remainingQty = rem ∧ ¬cancelled`) |
+| (c) After a partial fill | the maker has no status | the maker is `partiallyFilled` | the contra sides agree up to `nL`, and the match is over |
+
+**The loops:**
+- `inner_sim` folds `step_sim` over `innerRun` by induction on the bound. `innerStep_frame` supplies the walk-side facts: only the head level changes, and its ids only shrink.
+- `outerStep_OW` and `outer_sim` fold one outer iteration (level fetch, stop tests, inner loop, cleanup) under the invariant `OW`:
+  - the own side and the stops are the input's;
+  - the contra-side ids form a sublist of the input's;
+  - while `rem > 0`: no empty level and only good orders;
+  - `rel`: while the loop runs, the final reference result is the remaining computation from the related state; after exit, it is that state's `term`.
+
+### 4. Assembly: `sideProc_agree`, then `process_agree`
+
+- **Post-only** (`postOnly_iff`): the walk's test is `postOnlyCode`'s.
+- **Start state:** `OW` holds at `(b, qty, false, [])` against `mrOf b o` (`mr_eq`).
+- **Exit:** `outerRun_final` gives the terminal form.
+- **Rest block against `dispose`:**
+  - The book matches when the remainder rests at an existing level (`modAt_eq_map` + `insSpec_exists`) and at a fresh one (`modAt_insLevel` + `insSpec_fresh`).
+  - The view of the resting order matches (`nO_restOrder`).
+  - The no-rest case uses `dispose_norest`.
+- **The three failure returns of the rest block are dead on `WF` books,** each proved:
+  - order pool full: `count` after matching ≤ `count b` < `cap`;
+  - level pool full: levels ≤ orders on both sides;
+  - hash duplicate: after matching, the ids form a sublist of the input's, and the id was not on the input.
+
+### Evidence re-run after the A2 edits to `Spec.lean`
+
+- The full differential passes: 144,000 steps, D1 0, D2 0, 0 traps, 10,279 pessimistic capacity rejects.
+- Both mutants are caught.
+
+### `WF` and `Inv`: paper check; the Lean proof is A3 infrastructure
+
+| `WF` field | From `Inv s` and `CapOk S` for `absBook (view s)` |
+|---|---|
+| `cap64` | `CapOk` |
+| `stops` | `absBook` |
+| `count` | `count_eq` + `count_le` + `bookSize_absBook` |
+| `nonempty` | `ClientInv.level_nonempty` |
+| `resting` | `order_ok` (positive remaining) and `restingOrder`'s definition (`visibleQty = remainingQty`, `displayQty = none`, side from the tree) |
+| `ids` | `Db.WF.hash_ids` + `queue_unique` + `hash_iff_queued` |
+| `sorted` | `absBook_AllInv` (sorted sides) with `pairwise_of_bidsSorted`/`pairwise_of_asksSorted` |
+
+A3 will prove `WF_of_Inv` in `lean/Walk/` and mark it as infrastructure.
+
+## Shared lemmas from `main` (all spec-side: no store, no program), with uses
+
+| Source | Lemmas | Used in |
+|---|---|---|
+| `SpecStep.lean` (approved, A0 ⚑4) | `MatcherSpec.rest`, `rest_step`, `rest_step_done`, `rest_start`, `rest_done`, `rest_empty`, `rest_noprice`, `dm`, `term`, `drop1`, `AtHead`, `step_cancelNew`/`Old`/`Both`, `step_decrement_full`/`part`, `step_fill_full`/`part`, `fillTrade`, `decInc`, `mm_drop1`, `done_of_cancelled`, `mrOf`, `o1Of`, `afterMatch` | `step_sim`, `inner_sim`, `outerStep_OW`, `mr_eq`, `sideProc_agree` |
+| `Run.lean` | `nB`, `nL`, `nO`, `bookView_iff`, `pwi_cases`, `postOnlyCode_cases`, `insertDesc_nL`, `insertAsc_nL` | `Agree.obs`, `sideProc_agree` |
+| `Accept.lean` | `SpecOrd`, `specOrd_of`, `sideOf_isBuy`, `term_bids_asks`, `restOrd`, `dispose_rest`, `dispose_norest`, `Static`, `static_of` | `CO_of`, `postOnly_iff`, `nO_restOrder`, `sideProc_agree`, `process_agree` |
+| `Refines.lean` | `staticCode`, `processB_static`, `processB_after_static`, `requestMayRest_iff` | `processOrder_eq`, `processOrder_entry`, `sideProc_agree` |
+| `Inner.lean` | `IncShape` and its accessors, `canMatch_shape` | `IR`, `step_sim` |
+| `Rest.lean` | `insSpec`, `insSpec_fresh`, `insSpec_exists` | `sideProc_agree` |
+| `Cancel.lean` | `removeLevelOrder_eq`, `dropStep` | `walkRemove_eq` |
+| `MatchingEngine/Theorems.lean` | `computeMatchFuel_gt_matchMeasure` | `mr_eq` |
+
+The files other than `SpecStep.lean` go beyond what A0 ⚑4 approved (⚑1 below). Every lemma listed is a statement about `processB`, `process`, `doMatch` or reference lists. None mentions the store or the program.
 
 ## Deviations from PLAN-W.md (what, why)
 
-1. **No `Next` type.**
-   - The program has no `break` and no `continue`; every loop exits through its test. `Next.done` would never be produced.
-   - So `innerStep : Ctx → State → Option State`, where `none` is the one in-body trap, a full trade buffer (`me_trap(3)`).
-2. **`Walk.process` returns `Option (ResultCode × ProcessResult)`.** `none` means the program traps:
-   - bound exhausted, `me_trap(2)`;
-   - trade buffer full, `me_trap(3)`;
-   - `cap + 1` does not fit `uint64_t`, `me_trap(1)`.
+1. **`WF` is stronger than proposed at A0.** It adds three fields:
+   - `sorted`: strict price order on each side. Needed to insert the remainder at an existing level (`insertDesc` finds the same level as `tFind` only on a sorted side), and by cancel (distinct prices).
+   - `resting.side`: needed by cancel, which removes the emptied level from the tree of the order's side.
+   - `cap64`: `Walk.process` traps on a `cap + 1` that does not fit `uint64_t`.
 
-   This extends A0 ⚑5 from `run` to `process`. `run_fuel_sufficient` shows `none` never happens on a C-reachable book. So A2 will state `Walk.process cap b req = some w ∧ obsSpec w = obsSpec (processB cap b req)`.
-3. **`Ctx` carries the raw `CRequest`, not a spec `Order`.**
-   - The program's parameters are the request fields, so the walk tests the raw codes as the C does (`otype = 3`, `stp = 1`, …).
-   - The five extra fields of a reference `Trade` are built from the request and the passive order's STP group (`mkTrade`). The trade list is intended to equal the reference's element for element, not only under `tradeObs`; A2 will confirm.
-4. **`count` is `(allBookOrders b).length`, not `bookSize`.** The C has no stops. The two agree on every book with `stops = []`, which covers every decoded book and every book `processB` reaches from empty.
-5. **More primitives than proposed at A0.**
-   - `modAt`, `qRemoveTail`, `tInsertNew`, `tFind`, `levelsUsed` and `owner` are needed by the rest block and cancel, including the unreachable failure branches (level-pool full, hash-insert duplicate). Those are transliterated, not dropped.
-   - `qRemoveTail` is `queue_remove(lvl, ord)` for the order just appended; that it is the tail is a fact about the program, noted beside it.
-6. **The differential runner uses `#eval`.**
-   - `Matcher.CheckLean` defines `main`, so a module that imports it (to reuse `genReq` and `matcherStep` unchanged) cannot define its own.
-   - `lean/Walk/CheckRun.lean` evaluates `Walk.Check.runIO`, with parameters from `WALK_*` environment variables. The speed is the same as `lean --run` (both interpret).
-7. **The runner script is `docs/walk-spec/walk_diff.sh`,** not under `scripts/`. `scripts/` is outside the directories this experiment may add to.
-8. **Build targets.**
-   - The `lakefile.toml` entry is the only edit outside `lean/Walk/` and `docs/walk-spec/`: `[[lean_lib]] name = "Walk"`, with `roots = ["Walk.Spec", "Walk.Basic", "Walk.Check"]`, which keeps the `#eval` runner out of the library.
-   - The Walk library is not in `defaultTargets`, since that would be a second edit. So "lake build clean" here means both `lake build` and `lake build Walk`.
-9. **No `walk_oracle` executable for `tests/differential/run.sh`.** A1's instructions named only the two Lean differentials, and an executable would be a second `lakefile.toml` entry. It is available on request.
+   A0's claim that no sortedness would be needed was wrong. `Inv` still implies `WF` (table above).
+2. **Two refactors of `Spec.lean` in A2,** with no change in behaviour (the differentials re-ran clean):
+   - `owner` and `qRemove` name the order by id, not by structural `BEq` on `Order`, which is derived and not lawful. That fits "a handle names one order; the hash keeps ids unique".
+   - The post-only test's book part is the named function `postOnlyCross`. An inline `match` elaborates to its own auxiliary matcher, which no lemma stated separately can mention.
+
+   The C line ↔ Lean line table was updated.
+3. **Theorem statement:** `∃ w, Walk.process cap b req = some w ∧ obsSpec w = obsSpec (processB cap b req)`. This follows from `Walk.process` returning `Option` (A1 deviation 2).
 
 ## Findings
 
-1. **The program is one-to-one with a walk on the reference `BookState` as it stands.**
-   - Every store call in the matcher maps to one total list primitive.
-   - Every local is a `State` field, a `let`, or a derived head (`best`, `passive`, `nextp`, `victim`).
-   - The transliteration passed D2 on its first run. No reshaping of `Program.lean` was needed.
-2. **`Walk.process` agrees with `processB` on every tested step (D1 = 0),** including the trades list under `tradeObs` and the book view. So the equivalence A2 must prove is, on this evidence, true as stated.
-3. **Phase 3's cap-20 run never exercises the capacity path:** 0 code-5 results at cap 20 with `genReq`. `genFill` covers it: 1,382 code-5 results at cap 20, 362 of them pessimistic.
-4. **The trade-buffer bound (`me_trap(3)`) needs its own argument.**
-   - The argument is the potential `trades + contra orders ≤ cap` while `rem > 0`. It holds because each emitted trade either removes the maker or ends the match.
-   - It is not implied by the loop bounds alone: a level of `cap` orders all filled emits `cap` trades within one outer iteration.
-5. **The rest block's failure returns** (order pool full → 5, level pool full → 5, hash duplicate → 4) are reachable in the walk only on books where the entry checks would have rejected already. They are kept, transliterated, for A3's one-to-one lemma. A2 will show they are dead under the entry checks.
+1. **The continuation device moved; it did not disappear.**
+   - A2 relates the walk to `doMatch` through `MatcherSpec.rest` and `rest_step`. That is the device behind the direct proof's `spec : c.mr = rest …` clause. Here it is `OW.rel` and the `rest` equations of `step_sim`/`inner_sim`.
+   - What changed is where it lives. It is a statement over Lean lists only, so no store, handle or `InvM` fact is mixed into it.
+   - A3 should then need no continuation clause. That is the claim A4 will measure.
+2. **One walk step is one reference step,** with exactly three bookkeeping differences (the table above). No reference branch needed reordering; there is no trade reordering and no missing trade field.
+3. **The trades agree as full reference `Trade` records,** element for element, not only under `tradeObs`. So do the extra fields `aggPostOnly`, `aggStpGroup`, `pasStpGroup` and `aggStpPolicy`.
+4. **Cancel agrees exactly,** not only through the view, on books with unique ids, distinct prices and no empty level.
+5. **The rest block's failure returns are dead on `WF` books,** now by proof (A1 Finding 5 stated this on the evidence).
+6. **For `main`'s EVIDENCE.md, not changed here:**
+   - `main`'s Phase 3 differential stream at capacity 20 (`genReq`, seed 7, 400 × 60) never exercises the capacity reject: 0 code-5 results, 0 pessimistic.
+   - This branch's fill streams (`genFill`, seed 11, 200 × 60) do: 1,382 code-5 results at cap 20, 362 of them pessimistic.
+7. **Proof engineering, for A4:**
+   - `omega` ignores hypotheses whose type is `Quantity`, a `def` for `Nat` in the reference, so some arithmetic went through small `Nat` lemmas.
+   - An `if` whose condition contains a `match` cannot be rewritten by a separately stated lemma, which is why `postOnlyCross` is named.
 
 ## ⚑ Questions for Ara
 
-1. Should the `Walk` library be added to `defaultTargets`, so a bare `lake build` covers it? That is a second one-line lakefile edit; not done.
-2. Do you want a `walk_oracle` executable (a second lakefile entry) so `tests/differential/run.sh` can also be driven against `Walk.process`? Not done.
+1. **Shared-lemma scope.** A2 imports spec-only lemmas from `Run.lean`, `Accept.lean`, `Refines.lean`, `Inner.lean`, `Rest.lean` and `Cancel.lean`, not only `SpecStep.lean` (table above). Is that acceptable, counted as shared in A4? The alternative is to re-derive them under `lean/Walk/`, roughly 250–300 lines: `pwi_cases`, `processB_after_static`, `insSpec_*`, `specOrd_of`, the `nB` normal forms.
 
 ## Next phase, first step
 
-A2, `lean/Walk/Equiv.lean`:
-1. Entry checks and cancel, one lemma per branch. The first targets are `processOrder`'s checks against `processB`'s `decodeOrderType`/`toSpec`/`qmax`/`idOnBook`/`requestMayRest` ladder: `hashFind … isSome ↔ idOnBook`, and `count = bookSize` under `stops = []`.
-2. Cancel: the `owner`/`qRemove`/`tRemove` sequence against `cancelOrder`'s `removeLevelOrder` on a book with unique ids.
-3. Then the fuel frame (`run_fuel_sufficient` for the walk, `doMatch_fuel_stable` for the reference), before the step correspondence.
+A3, `lean/Walk/Refine.lean`:
+1. Prove `WF_of_Inv` (infrastructure).
+2. Then the inner body lemma: one execution of `sideFun`'s inner body from (store, locals) related to `st` yields (store', locals') related to `innerStep st`. The relation is `bookView (absBook (view s)) = bookView st.book` (up to the empty head level being present in both), `rem = st.rem`, `emitted = st.trades.map tradeObs`, plus the two derived-local clauses.
+3. It reuses `main`'s `StoreStep` and `LoopEnv` statement lemmas as infrastructure, listed at A3.
+
+Sessions so far: A0 1, A1 1, A2 1.
