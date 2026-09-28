@@ -95,7 +95,7 @@ theorem mini_queue_absDb3_decodes
     decode (`mini_queue_absDb3_decodes`), so the refinement cannot hold
     vacuously through a failed decode.
 
-    It does not discharge `insert_forward_sim` below, which still uses `sorry`.
+    (The composite `insert_forward_sim` it was meant to feed is retired; see below.)
     Axioms: `propext`, `Classical.choice`, `Quot.sound`; no `sorry`. -/
 theorem mini_queue_insert_forward_sim
     (cap nb fuel : Nat) (m : Mem) (v : UInt32 × UInt64)
@@ -122,45 +122,9 @@ theorem mini_queue_insert_forward_sim
 #print axioms mini_queue_absDb3_decodes
 #print axioms mini_queue_insert_forward_sim
 
-/-- Master Forward Simulation Theorem for Order Insertion:
-    Executing the generated C matching engine insertion pipeline on a well-formed memory state `m`
-    under call/loop budget `fuel` produces a deterministic post-state `st'` whose persisted memory `st'.toMem`
-    satisfies `WfMem` and decodes via `alpha_concrete` to `abstract_insert emptyBook req.toOrder`.
+-- Retired (plan v2 §4): `insert_forward_sim` and `match_step_forward_sim`, which
+-- were `sorry`, are replaced by `MatcherAccept.matcher_refines` and
+-- `MatcherRun.matcher_run_refines` (lean/Matcher). See git history before Phase 5.
 
-    NOTE: Blocked on composite Atree level tree synthesis and multi-table footprint framing.
-    Marked with an honest `sorry` documenting the compiler simulation obligations. -/
-theorem insert_forward_sim
-    (d : Dmmeta.Db) (p : Program) (hp : Templates.MiniDb.genC d = some p)
-    (m : Mem) (req : OrderRequest) (fuel : Nat)
-    (bids_root asks_root : Option Path)
-    (h_empty : alpha_concrete m bids_root asks_root = some emptyBook)
-    (h_wf : WfMem m bids_root asks_root)
-    (h_wf_req : WfOrder req)
-    (h_fuel : fuel ≥ execFuelBound emptyBook req.side) :
-    ∃ (st' : Store),
-      execStmt p fuel (insertStmt req) (m.toStore ∅) = .ok (st', Outcome.normal) ∧
-      WfMem st'.toMem bids_root asks_root ∧
-      alpha_concrete st'.toMem bids_root asks_root = some (abstract_insert emptyBook req.toOrder) := by
-  sorry
-
-/-- Forward Simulation for Match Step Execution:
-    Executing the generated C match step on a well-formed memory state `m`
-    produces a new memory state `st'.toMem` that preserves `SimRel` with
-    `abstract_match_step book req.toOrder passive req.stp_mode`. -/
-theorem match_step_forward_sim
-    (d : Dmmeta.Db) (p : Program) (hp : Templates.MiniDb.genC d = some p)
-    (m : Mem) (req : OrderRequest) (passive : Order) (fuel : Nat)
-    (bids_root asks_root : Option Path)
-    (book : BookState)
-    (h_sim : SimRel m bids_root asks_root book)
-    (h_wf_req : WfOrder req)
-    (h_fuel : fuel ≥ execFuelBound book req.side) :
-    ∃ (st' : Store),
-      execStmt p fuel (matchStmt req passive) (m.toStore ∅) = .ok (st', Outcome.normal) ∧
-      SimRel st'.toMem bids_root asks_root (abstract_match_step book req.toOrder passive req.stp_mode) := by
-  sorry
-
-#print axioms insert_forward_sim
-#print axioms match_step_forward_sim
 
 end VerifiedCMatchingEngine

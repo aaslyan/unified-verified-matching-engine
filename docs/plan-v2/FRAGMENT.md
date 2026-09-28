@@ -51,7 +51,7 @@ Any other operand combination is a `type` error.
 | `seq a b` | `a`, then `b` unless `a` returned | `a b` |
 | `assign x e` | set an existing local; its type must not change | `x = e;` |
 | `ite c a b` | branch on a `bool` | `if ((bool)c) { a } else { b }` |
-| `loop b c body` | while `c`, at most `b` iterations; **`bound` error** if `c` still holds after `b` | `for (k = 0, n = b;; k++) { if (!c) break; if (k == n) me_trap(); body }` |
+| `loop b c body` | while `c`, at most `b` iterations; **`bound` error** if `c` still holds after `b` | `for (k = 0, n = b;; k++) { if (!c) break; if (k == n) me_trap(2); body }` |
 | `ext dst op args` | EngineDb operation `op`; its contract precondition is checked on the store's view and a violation is a **`contract` error** | a call to the matching `engine_db.h` function |
 | `call dst f args` | call a function defined in the program; fresh locals; its return value | `dst = f(args);` |
 | `emit m t p q` | append trade (maker, taker, price, qty); **`tradeBuffer` error** once the program's `tradeCap` bound is reached | `me_emit(m, t, p, q);`: traps at the same bound, then calls `ME_trade_emit` |
@@ -69,7 +69,25 @@ and the trade buffer are checked in the printed C; the proof shows they are
 unreachable, and Phase 5 compares Lean error against C trap exactly.
 
 A function that ends without `ret` is a `noReturn` error; its printed body
-ends in `me_trap()`. Call nesting is bounded by `fuel` (`fuel` error).
+ends in `me_trap(4)`. Call nesting is bounded by `fuel` (`fuel` error).
+
+**Trap classes.** `me_trap(k)` names the error class it stands for
+(`Print.trapCode`):
+
+| k | Semantic error |
+|---|---|
+| 1 | `overflow` (add, sub, mul, a zero divisor, a bound that does not fit) |
+| 2 | `bound` |
+| 3 | `tradeBuffer` |
+| 4 | `noReturn` |
+| 5 | a malformed extern call (`arity`) |
+
+The shipped build ignores `k` and aborts. A harness may define
+`ME_TRAP_REPORT` to learn `k` first, which is how Phase 5's semantics test
+compares error classes. The other semantic errors (`type`, `unbound`,
+`invalidHandle`, `contract`, `fuel`, `noFun`) have no C counterpart. The
+proof rules them out, and the semantics test's generator never produces
+them.
 
 ## Evaluation order
 

@@ -1,5 +1,67 @@
 # STATUS-v2
 
+## Phase 5 — Evidence below the line
+
+**Date:** 2026-09-28. **Base commit:** `e7a28b3`. **Phase commit:** see `git log -- docs/plan-v2/EVIDENCE.md`.
+
+**All suites are green.** Counts, seeds, compiler versions and throughput are in `docs/plan-v2/EVIDENCE.md`. `tests/run_all.sh` reruns everything.
+
+| Suite | Directory | Result |
+|---|---|---|
+| Contract: every EngineDb law, as linked (adapter + handwritten data layer); each check quotes its Lean law | `tests/contract/` | 1.8M operations: seeds 1–50 × 3,000 operations, capacities 0/1/2/5/16/64, gcc and clang. All laws hold. 3 of 3 adapter mutants caught. |
+| Differential: generated matcher + data layer vs the executable spec `processB` as oracle, Obs only; handwritten engine as third voice | `tests/differential/` | 180,000 steps (6 configurations × 100 seeds × 300 requests). Oracle = generated on every step. Oracle throughput 24k–56k requests/s. |
+| Semantics: random programs, `execStmt` vs gcc -O0 / gcc -O2 / clang -O2, exact outcome including the trap class, nothing filtered | `tests/semantics/` | 4,000 programs (seeds 1–5 × 200 × capacities 0/1/3/7) × 3 compilers = 12,000 runs, all identical. Outcomes: ok 1,699, overflow 1,420, trade buffer 503, loop bound 225, missing return 153. |
+| Printer: pycparser reparse of `c/gen/matcher.c` and of every semantics program, diffed against the Lean AST | `tests/printer/` | Identical trees. 2 of 2 mutants caught. |
+
+**Handwritten engine (third voice).** Its first divergence is classified per seed (EVIDENCE §2). There are two classes, both expected: `capacity` (the v2 capacity rule) and `qty > Qmax` (the v2 quantity bound). Without over-Qmax quantities and with a store that never fills, it agrees with the spec on all 100 streams.
+
+**Files added**
+- `tests/contract/`: `contract_test.c`, `run.sh`.
+- `tests/differential/`: `gen_stream.py`, `runner.c`, `run.sh`.
+- `tests/semantics/`: `harness.c`, `run.sh`.
+- `tests/printer/`: `reparse.py`, `run.sh`, `stub/*.h`.
+- `tests/run_all.sh`.
+- `lean/Matcher/Oracle.lean` (exe `spec_oracle`) and `lean/Matcher/SemTest.lean` (exe `semtest`).
+- `lean/Matcher/AstDump.lean` and `lean/Matcher/DumpAst.lean`.
+- `lakefile.toml`: two `lean_exe` targets.
+- `docs/plan-v2/EVIDENCE.md`.
+
+**Files changed**
+- `lean/Matcher/Print.lean` and `c/gen/matcher.c` (reprinted). `me_trap(k)` now carries the error class. Also in the printer's docstring and FRAGMENT.md ("Trap classes").
+- `lean/Bridge/ForwardSimulation.lean`, `lean/UnifiedVerifiedMatchingEngine.lean`, `lean/AuditScratch.lean`, and `lean/Bridge/EndToEndTheorem.lean` (deleted): the retired artefacts (below).
+- `scripts/matcher_c_capacity.sh`: `KEEP_STATS` for per-seed rows.
+
+**Item B (the small-capacity table).** Re-run with per-seed rows kept (`KEEP_STATS`). The capacity-8 row (seeds 1–40) and the capacity-3 row (seeds 100–139) are their own numbers:
+- per seed, the two runs differ in where the first divergence falls (mean calls compared 64.3 vs 14.2) and in which type it is;
+- only the totals coincide: 35 LIMIT / 5 POST_ONLY / 12 continued in both.
+
+Other seed ranges give 31/9 and 32/8 splits and continued counts of 8, 12, 13 and 16. So the coincidence is in the sums, not an artefact of the script.
+
+**Deviations from the plan**
+- **The printer changed.** `me_trap()` became `me_trap(k)`, where `k` is the error class, so the semantics test can compare error classes exactly, as asked. `Program.lean` is unchanged, so the proofs are unaffected (the printer is below the line). The shipped behaviour is unchanged (`abort()`). `matcher.c` was reprinted and checked:
+  - it compiles with `-Werror` under both compilers at -O0 and -O2;
+  - `make test-gen` passes 7/7;
+  - the fragment check passes;
+  - the differential and the printer check ran on the new file.
+- **Phase 4 step 4 (delete the retired artefacts) was missed at the end of Phase 4 and is done here.** Per §4, the removed items are:
+  - `c_matching_engine_end_to_end_sound` (circular), with its file `lean/Bridge/EndToEndTheorem.lean`;
+  - `insert_forward_sim` and `match_step_forward_sim` (`sorry`).
+  
+  **The project now has 0 `sorry`.**
+- **Semantics-test scope.**
+  - Generated programs use the store only through reads, allocation and field writes, not the index operations. The index operations are covered by the contract test and the differential.
+  - Loop bounds that neither overflow nor stay small are excluded: the executable semantics folds over the whole bound. For `capacity + k`, the overflow edge is taken at `k = 2^64 − capacity`, the first overflowing value.
+- **Printer-check erasures.** The reparse cannot distinguish `code` from `u64`, or the two null tests, because C prints them identically. The comparison erases exactly those, and FRAGMENT.md already documents them.
+
+**Tests**
+- `lake build`: clean, 0 `sorry` in the project.
+- Lean regression `scripts/matcher_lean_diff.sh`: 72,000 requests, 0 mismatches (the matcher's Lean semantics is unchanged).
+- `make test-gen` 7/7.
+
+**Next:** Phase 6 (AMCC side: discharge the contract for the generated data layer), a separate loop.
+
+---
+
 ## Phase 4 closing item — the run-level theorem
 
 **Date:** 2026-09-28. **File:** `lean/Matcher/Run.lean`.

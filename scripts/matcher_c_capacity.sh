@@ -70,6 +70,7 @@ if not ok:
 print(f"diverged {k} {po_agree} {'LIMIT' if g[0] == 0 else 'POST_ONLY'}")
 PY
 done
+[ -n "${KEEP_STATS:-}" ] && cp "$out/stats.txt" "$KEEP_STATS"
 python3 - "$out/stats.txt" "$cap" "$seeds" "$steps" <<'PY'
 import sys
 rows = [l.split() for l in open(sys.argv[1]).read().splitlines()]

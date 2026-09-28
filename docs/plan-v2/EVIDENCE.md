@@ -1,0 +1,225 @@
+# Phase 5 — Evidence below the line
+
+Plan v2 §3 lists what the refinement theorem (`matcher_refines`,
+`matcher_run_refines`) does not prove and trusts instead:
+
+1. the C data layer satisfies the EngineDb contract;
+2. the matcher language's semantics agrees with what gcc and clang compile;
+3. the printer emits the tree the proof is about;
+4. the compilers are correct;
+5. execution is single-threaded.
+
+Phase 5 tests items 1–3 and, through item 2, exercises item 4. Every suite is
+green. The whole set runs with `tests/run_all.sh`.
+
+**Environment.** gcc 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1), clang 19.1.1
+(Ubuntu 1ubuntu1~24.04.2), Lean v4.26.0, Python 3.12.3, pycparser 3.00, Linux
+7.0.0 x86_64. Recorded on 2026-09-28.
+
+## 1. Contract tests (`tests/contract/`)
+
+**What is tested.** The EngineDb laws are checked against the data layer as
+linked under the matcher. That is the adapter `c/gen/engine_db_adapter.c` over
+the handwritten data layer `c/src/matching_engine_gen.c`, called through
+`c/gen/engine_db.h`.
+
+**Method.** `contract_test.c` keeps a model of the Lean `Db` view: orders,
+levels, queues, hash, trees and live sets. It drives the store with random
+operations whose contract preconditions hold in the model, and applies each
+operation's Lean postcondition to the model. After every operation it checks
+everything observable through `engine_db.h` against the model. Each law has
+its own check, and the check's comment quotes the Lean statement it tests.
+
+**Laws checked.** Each check below is labelled with its Lean name.
+- Allocation:
+  - `orderAlloc_law` and `levelAlloc_law`: allocation fails exactly when the pool is at capacity;
+  - `orderAlloc_full` and `levelAlloc_full`: a failed allocation leaves the store unchanged;
+  - `orderAlloc_valid`: allocation returns a handle that was not live.
+- `orderFree_law` / `orderFree_valid` and `levelFree_law` / `levelFree_valid`.
+- `readOrder_law` / `writeOrder_law` and `readLevel_law` / `writeLevel_law`.
+- `levelCount_law`.
+- `owner_law` / `owner_valid`.
+- Hash:
+  - `hashFind_law` / `hashFind_valid` / `hashFind_unique`;
+  - `hashInsert_law` / `hash_find_after_insert` / `hash_insert_refused`;
+  - `hashRemove_law` / `hash_find_after_remove`.
+- Queues, which carry the FIFO order:
+  - `qInsertTail_law` / `queue_after_insertTail` / `first_stable_under_insertTail`;
+  - `qRemove_law` / `first_after_remove_head`;
+  - `qFirst_law` / `qFirst_valid`;
+  - `qNext_law` / `qNext_valid`.
+- Trees:
+  - `tFind_law` / `tFind_valid` / `tFind_unique`;
+  - `tInsert_law` / `tree_find_after_insert`;
+  - `tRemove_law` / `tree_find_after_remove`;
+  - `tBest_law` / `tBest_valid` / `tBest_unique`.
+- The count and levelsUsed laws for every operation.
+- `init_view` / `init_count` / `init_levelsUsed`.
+- Handles stay valid after a remaining-quantity write (reduce).
+- Level totals equal the sum of remaining quantities. This is private to the data layer, which maintains it.
+- Read purity (FRAGMENT.md, "Evaluation order"). Bursts of random reads are interleaved everywhere, and the full observation before and after each burst must be identical.
+
+**Handle validity.** Using a freed handle is undefined in C, so the test never
+does it. What it does check is that the store never hands out an invalid handle:
+- every lookup (hash find, tree find, tree best, queue first and next, owner) returns a handle live in the model;
+- every allocation returns a handle that was not live.
+
+**Run.** `tests/contract/run.sh 1 50 3000`:
+- seeds 1–50, 3,000 operations each;
+- capacities 0, 1, 2, 5, 16 and 64;
+- gcc -O2 and clang -O2.
+
+That is 12 configurations × 150,000 operations = 1.8 million operations. **All laws hold in every configuration.** Check counts per law are printed by the run; at capacity 5 with 20 seeds they range from about 180 (reduce) to 2.2 million (`tFind`).
+
+**Sensitivity.** Three mutants of the adapter are caught within the first 300 operations of seed 1:
+
+| Mutant | Law that fails |
+|---|---|
+| Order allocation succeeds one row past capacity | `orderAlloc_law` |
+| Hash insert replaces a duplicate id instead of refusing it | `hashInsert_law` |
+| The remaining-quantity write no longer updates the level total | totals |
+
+## 2. Differential test (`tests/differential/`)
+
+**Three voices.** For each seed, `gen_stream.py` produces a random request
+stream, which runs through three engines:
+- the **oracle**: the executable spec `processB` (`lean/Matcher/Oracle.lean`, built as `spec_oracle`);
+- the **generated matcher** (`c/gen/matcher.c`) with the adapter and the handwritten data layer, calling `gen_process_order` / `gen_cancel_order` for their result codes;
+- the **handwritten engine** (`c/src/matching_engine.c`), as a third voice.
+
+**What is compared.** Only `Obs`, after every request: the result code, the
+trades (maker, taker, price, qty), and the book view (for each level, best
+first: price, then for each order id, remaining, qty, account and STP policy).
+The oracle and the generated matcher must agree exactly on every step. The
+handwritten engine returns only a bool, so its comparison maps
+accepted/cancelled to true. It is compared up to its first divergence, which
+is classified per seed by the oracle's result code at that step.
+
+**Streams** contain:
+- duplicate ids;
+- cancels of resting, removed and never-used ids;
+- an unsupported order type and an invalid STP mode;
+- price 0, quantity 0, and quantities above Qmax for the capacity;
+- at small capacities, a store that fills, so capacity rejections occur and post-only orders arrive at a full store.
+
+| Capacity | Profile | Steps | Oracle = generated | Oracle throughput | Handwritten engine, first divergence per seed |
+|---|---|---|---|---|---|
+| 2 | full | 100 seeds × 300 = 30,000 | **all 30,000 steps** | 46,607 req/s | capacity 89, qty > Qmax 11 |
+| 8 | full | 30,000 | **all** | 37,875 req/s | qty > Qmax 60, capacity 40 |
+| 64 | full | 30,000 | **all** | 23,891 req/s | qty > Qmax 99, identical 1 |
+| 1,000,000 | full | 30,000 | **all** | 32,704 req/s | qty > Qmax 99, identical 1 |
+| 8 | noqmax | 30,000 | **all** | 56,395 req/s | capacity 99, identical 1 |
+| 1,000,000 | noqmax | 30,000 | **all** | 53,904 req/s | **identical 100** |
+
+That is 180,000 steps, and the oracle and the generated matcher agree on all
+of them. Throughput is wall-clock for the compiled `spec_oracle`, including
+process start. Seeds 1–100 at every row.
+
+**Coverage.** The oracle's result codes over the four `full` rows:
+
+| Capacity | Accepted | Cancelled | Unsupported | Invalid | Duplicate | Capacity | Post-only | Unknown id | Post-only at a full store |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 | 9,166 | 357 | 1,212 | 3,748 | 129 | 10,140 | 153 | 5,095 | 3,774 |
+| 8 | 13,983 | 808 | 1,212 | 3,748 | 298 | 4,335 | 972 | 4,644 | 1,610 |
+| 64 | 17,629 | 1,145 | 1,212 | 3,748 | 427 | 0 | 1,532 | 4,307 | 0 |
+| 1,000,000 | 17,629 | 1,145 | 1,212 | 3,748 | 427 | 0 | 1,532 | 4,307 | 0 |
+
+**Divergence classes of the handwritten engine.** Both are expected, and are
+recorded rather than failing the run. They are the two §4 rules the handwritten
+engine does not have:
+- `capacity`: at a full store, a LIMIT or a non-crossing POST_ONLY order is rejected by the generated matcher before any trade, while the handwritten engine rests it.
+- `qty > Qmax`: the v2 quantity bound; the handwritten engine accepts any quantity.
+
+With the over-Qmax quantities left out (profile `noqmax`) and a store that
+never fills, the handwritten engine agrees with the spec on every step of all
+100 streams.
+
+## 3. Semantics test (`tests/semantics/`)
+
+**Method.** `lean/Matcher/SemTest.lean` (built as `semtest`) generates random
+programs in the matcher language. It runs each one under `execStmt`
+(`runEntry` on the model store `AbsStore cap`) and prints it with
+`Print.program`. Each program is then compiled with `harness.c`, the adapter
+and the handwritten data layer, under gcc -O0, gcc -O2 and clang -O2, and run.
+
+**Comparison.** The outcomes must be identical:
+- `ok <value> <order count> [trades]`; or
+- `trap <class>`, with the same class on both sides.
+
+For the class, the printer's `me_trap(k)` now carries the error class `k`
+(`Print.trapCode`): 1 overflow or zero divisor, 2 loop bound, 3 trade buffer,
+4 missing return, 5 malformed extern. The harness defines `ME_TRAP_REPORT` to
+read `k` before the abort. **Nothing is filtered.** The generator only
+produces programs whose errors are of a class the C traps. A semantic error
+that is not (`invalidHandle`, `contract`, `type`, …) is printed as `leanerr`
+and fails the comparison.
+
+**Program contents.**
+- Expressions with several store reads (`capacity`, `count`, order fields) and pure arithmetic. Expressions contain no state-changing call, by construction.
+- `&&` guarding reads through handles that may be null (short-circuit).
+- Overflow-adjacent constants: 2^64−1, 2^64−2, 2^63, 2^63−1, 2^32, 2^32−1.
+- Every loop-bound edge:
+  - literal bounds 0–5, with iteration counts at bound − 1, at the bound, and at bound + 1 and + 2;
+  - `capacity + k` bounds with counts `capacity + k`, `capacity + k + 1`, `capacity` and 0;
+  - `capacity + k` overflowing, with k = 2^64 − 1 and 2^64 − 2.
+- Trade emission up to and past the buffer of `capacity + 1`.
+- Allocation, which can fail at capacity, followed by writes of all seven fields.
+- Calls to helper functions, some of which fall off their end.
+
+**Printer check included.** Every generated program is also reparsed by
+`tests/printer/reparse.py` and compared with its syntax tree (section 4).
+
+**Run.** `tests/semantics/run.sh <seed> 200 <cap>` for seeds 1–5 and
+capacities 0, 1, 3 and 7. The generator's seed mixes in the capacity, so the
+programs differ between capacities.
+
+| Measure | Value |
+|---|---|
+| Distinct programs | 4,000 |
+| Compiled runs (× 3 configurations) | 12,000 |
+| Agree with `execStmt` | **all 12,000** (gcc -O0 4,000/4,000, gcc -O2 4,000/4,000, clang -O2 4,000/4,000) |
+| Filtered | none |
+
+| Semantic outcome | Programs | C outcome |
+|---|---|---|
+| ok (value, order count and trades equal) | 1,699 | same |
+| trap 1: overflow or zero divisor | 1,420 | `me_trap(1)` |
+| trap 3: trade buffer full | 503 | `me_trap(3)` |
+| trap 2: loop bound | 225 | `me_trap(2)` |
+| trap 4: missing return | 153 | `me_trap(4)` |
+
+**Fixed during the run.** At capacity 0, the generator's "overflowing" bound
+`capacity + (2^64 − 2)` did not overflow, and the Lean semantics tried to fold
+over 2^64 − 2 iterations; the run was killed. The overflow edge is now taken
+relative to the capacity (`k = 2^64 − capacity` and `2^64 − 1`, for capacity ≥ 1).
+All numbers above are from after the fix.
+
+## 4. Printer (`tests/printer/`)
+
+**Method.** `reparse.py` parses the printed C with pycparser. It first runs
+`gcc -E` with stub headers, and leaves `UINT64_C` unexpanded so literals stay
+visible. It then maps the C back to the matcher language's tree and prints it
+as an S-expression. `lean/Matcher/AstDump.lean` prints the same S-expression
+form directly from the Lean AST, not through the C printer, and `run.sh`
+diffs the two.
+
+**Erased.** Exactly what the C printing identifies:
+- `code` prints as `uint64_t`;
+- a null test prints as `== NULL` for both handle types;
+- block nesting and `skip` are flattened.
+
+**Rejected.** Anything outside the printer's language is rejected, not skipped.
+
+**Results.**
+- `c/gen/matcher.c`: reparses to the tree of `lean/Matcher/Program.lean` (5 functions).
+- Every random program of the semantics test: 4,000 of 4,000 identical.
+- Sensitivity: changing one `<=` to `<` in `matcher.c`, or one loop's trap class, is reported: a tree difference in the first case, not the printer's language in the second.
+
+## Summary
+
+| Suite | Scale | Result |
+|---|---|---|
+| Contract | 1.8M operations, 12 configurations | all laws hold |
+| Differential | 180,000 steps, 6 configurations | oracle = generated on every step |
+| Semantics | 4,000 programs × 3 compilers | 12,000 of 12,000 identical outcomes, trap class included; nothing filtered |
+| Printer | `matcher.c` + every semantics program | identical trees |

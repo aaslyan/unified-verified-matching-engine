@@ -21,3 +21,13 @@ srcDir = "lean"
 [[lean_lib]]
 name = "Matcher"
 srcDir = "lean"
+
+[[lean_exe]]
+name = "spec_oracle"
+root = "Matcher.Oracle"
+srcDir = "lean"
+
+[[lean_exe]]
+name = "semtest"
+root = "Matcher.SemTest"
+srcDir = "lean"

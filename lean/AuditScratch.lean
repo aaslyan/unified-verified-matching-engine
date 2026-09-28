@@ -1,4 +1,3 @@
-import Bridge.EndToEndTheorem
 import Amcc.Templates.ArrayTableWf
 
 open CSubset
@@ -54,5 +53,4 @@ def noSelfTradesBool (b : VerifiedCMatchingEngine.BookState) : Bool :=
 #print axioms VerifiedCMatchingEngine.wf_mem_implies_AllInv
 #print axioms VerifiedCMatchingEngine.top_of_book_match_sound
 #print axioms VerifiedCMatchingEngine.matching_engine_execution_sound
-#print axioms VerifiedCMatchingEngine.c_matching_engine_end_to_end_sound
 #print axioms Templates.ArrayTable.genWellFormed

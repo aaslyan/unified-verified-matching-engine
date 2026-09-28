@@ -6,28 +6,38 @@
 
 static uint64_t me_ntrades;
 
-_Noreturn static inline void me_trap(void) { abort(); }
+#ifdef ME_TRAP_REPORT
+void ME_TRAP_REPORT(unsigned k);
+#endif
+_Noreturn static inline void me_trap(unsigned k) {
+#ifdef ME_TRAP_REPORT
+  ME_TRAP_REPORT(k);
+#else
+  (void)k;
+#endif
+  abort();
+}
 static inline __attribute__((unused)) uint64_t me_add(uint64_t a, uint64_t b) {
   uint64_t r;
-  if (__builtin_add_overflow(a, b, &r)) me_trap();
+  if (__builtin_add_overflow(a, b, &r)) me_trap(1);
   return r;
 }
 static inline __attribute__((unused)) uint64_t me_sub(uint64_t a, uint64_t b) {
   uint64_t r;
-  if (__builtin_sub_overflow(a, b, &r)) me_trap();
+  if (__builtin_sub_overflow(a, b, &r)) me_trap(1);
   return r;
 }
 static inline __attribute__((unused)) uint64_t me_mul(uint64_t a, uint64_t b) {
   uint64_t r;
-  if (__builtin_mul_overflow(a, b, &r)) me_trap();
+  if (__builtin_mul_overflow(a, b, &r)) me_trap(1);
   return r;
 }
 static inline __attribute__((unused)) uint64_t me_div(uint64_t a, uint64_t b) {
-  if (b == UINT64_C(0)) me_trap();
+  if (b == UINT64_C(0)) me_trap(1);
   return a / b;
 }
 static inline __attribute__((unused)) void me_emit(uint64_t m, uint64_t t, uint64_t p, uint64_t q) {
-  if (me_ntrades >= me_add(ME_capacity(), UINT64_C(1))) me_trap();
+  if (me_ntrades >= me_add(ME_capacity(), UINT64_C(1))) me_trap(3);
   ME_trade_emit(m, t, p, q);
   me_ntrades = me_ntrades + UINT64_C(1);
 }
@@ -40,7 +50,7 @@ uint64_t gen_min_u64(uint64_t a, uint64_t b) {
   } else {
     return b;
   }
-  me_trap();
+  me_trap(4);
 }
 
 uint64_t gen_process_buy(uint64_t id, uint64_t account, uint64_t side, uint64_t otype, uint64_t stp, uint64_t price, uint64_t qty) {
@@ -86,7 +96,7 @@ uint64_t gen_process_buy(uint64_t id, uint64_t account, uint64_t side, uint64_t 
   rem = qty;
   for (uint64_t me_k0 = UINT64_C(0), me_n0 = me_add(ME_capacity(), UINT64_C(1));; me_k0 = me_k0 + UINT64_C(1)) {
     if (!((UINT64_C(0) < rem) && (!stop))) break;
-    if (me_k0 == me_n0) me_trap();
+    if (me_k0 == me_n0) me_trap(2);
     best = ME_asks_best();
     if ((bool)(best == NULL)) {
       stop = true;
@@ -97,7 +107,7 @@ uint64_t gen_process_buy(uint64_t id, uint64_t account, uint64_t side, uint64_t 
         passive = ME_queue_first(best);
         for (uint64_t me_k1 = UINT64_C(0), me_n1 = me_add(ME_capacity(), UINT64_C(1));; me_k1 = me_k1 + UINT64_C(1)) {
           if (!((!(passive == NULL)) && (UINT64_C(0) < rem))) break;
-          if (me_k1 == me_n1) me_trap();
+          if (me_k1 == me_n1) me_trap(2);
           if ((bool)(((account != UINT64_C(0)) && (account == ME_order_get_account(passive))) && (stp != UINT64_C(0)))) {
             if ((bool)(stp == UINT64_C(1))) {
               rem = UINT64_C(0);
@@ -193,7 +203,7 @@ uint64_t gen_process_buy(uint64_t id, uint64_t account, uint64_t side, uint64_t 
   } else {
   }
   return UINT64_C(0);
-  me_trap();
+  me_trap(4);
 }
 
 uint64_t gen_process_sell(uint64_t id, uint64_t account, uint64_t side, uint64_t otype, uint64_t stp, uint64_t price, uint64_t qty) {
@@ -239,7 +249,7 @@ uint64_t gen_process_sell(uint64_t id, uint64_t account, uint64_t side, uint64_t
   rem = qty;
   for (uint64_t me_k0 = UINT64_C(0), me_n0 = me_add(ME_capacity(), UINT64_C(1));; me_k0 = me_k0 + UINT64_C(1)) {
     if (!((UINT64_C(0) < rem) && (!stop))) break;
-    if (me_k0 == me_n0) me_trap();
+    if (me_k0 == me_n0) me_trap(2);
     best = ME_bids_best();
     if ((bool)(best == NULL)) {
       stop = true;
@@ -250,7 +260,7 @@ uint64_t gen_process_sell(uint64_t id, uint64_t account, uint64_t side, uint64_t
         passive = ME_queue_first(best);
         for (uint64_t me_k1 = UINT64_C(0), me_n1 = me_add(ME_capacity(), UINT64_C(1));; me_k1 = me_k1 + UINT64_C(1)) {
           if (!((!(passive == NULL)) && (UINT64_C(0) < rem))) break;
-          if (me_k1 == me_n1) me_trap();
+          if (me_k1 == me_n1) me_trap(2);
           if ((bool)(((account != UINT64_C(0)) && (account == ME_order_get_account(passive))) && (stp != UINT64_C(0)))) {
             if ((bool)(stp == UINT64_C(1))) {
               rem = UINT64_C(0);
@@ -346,7 +356,7 @@ uint64_t gen_process_sell(uint64_t id, uint64_t account, uint64_t side, uint64_t
   } else {
   }
   return UINT64_C(0);
-  me_trap();
+  me_trap(4);
 }
 
 uint64_t gen_process_order(uint64_t id, uint64_t account, uint64_t side, uint64_t otype, uint64_t stp, uint64_t price, uint64_t qty) {
@@ -402,7 +412,7 @@ uint64_t gen_process_order(uint64_t id, uint64_t account, uint64_t side, uint64_
     r = gen_process_sell(id, account, side, otype, stp, price, qty);
   }
   return r;
-  me_trap();
+  me_trap(4);
 }
 
 uint64_t gen_cancel_order(uint64_t id) {
@@ -439,5 +449,5 @@ uint64_t gen_cancel_order(uint64_t id) {
   } else {
   }
   return UINT64_C(1);
-  me_trap();
+  me_trap(4);
 }
