@@ -16,6 +16,10 @@
   exposed by the refinement statement.  `runEntry_fuel_stable` proves that a
   successful result is unchanged at every larger fuel; `#print axioms` reports
   `[propext, Quot.sound]`.
+- Oracle throughput is now explicitly machine-specific.  EVIDENCE retains the
+  six original figures (whose CPU was not recorded) and places beside them the
+  independent fact-check rerun's 54,998–62,805 requests/s on an AMD Ryzen AI 9
+  HX 370 with Radeon 890M.
 
 ---
 

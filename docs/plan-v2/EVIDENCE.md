@@ -140,18 +140,21 @@ is classified per seed by the oracle's result code at that step.
 - price 0, quantity 0, and quantities above Qmax for the capacity;
 - at small capacities, a store that fills, so capacity rejections occur and post-only orders arrive at a full store.
 
-| Capacity | Profile | Steps | Oracle = generated | Oracle throughput | Handwritten engine, first divergence per seed |
-|---|---|---|---|---|---|
-| 2 | full | 100 seeds × 300 = 30,000 | **all 30,000 steps** | 46,607 req/s | capacity 89, qty > Qmax 11 |
-| 8 | full | 30,000 | **all** | 37,875 req/s | qty > Qmax 60, capacity 40 |
-| 64 | full | 30,000 | **all** | 23,891 req/s | qty > Qmax 99, identical 1 |
-| 1,000,000 | full | 30,000 | **all** | 32,704 req/s | qty > Qmax 99, identical 1 |
-| 8 | noqmax | 30,000 | **all** | 56,395 req/s | capacity 99, identical 1 |
-| 1,000,000 | noqmax | 30,000 | **all** | 53,904 req/s | **identical 100** |
+| Capacity | Profile | Steps | Oracle = generated | Original oracle throughput | Fact-check rerun throughput | Handwritten engine, first divergence per seed |
+|---|---|---|---|---|---|---|
+| 2 | full | 100 seeds × 300 = 30,000 | **all 30,000 steps** | 46,607 req/s | 62,805 req/s | capacity 89, qty > Qmax 11 |
+| 8 | full | 30,000 | **all** | 37,875 req/s | 59,037 req/s | qty > Qmax 60, capacity 40 |
+| 64 | full | 30,000 | **all** | 23,891 req/s | 55,745 req/s | qty > Qmax 99, identical 1 |
+| 1,000,000 | full | 30,000 | **all** | 32,704 req/s | 56,032 req/s | qty > Qmax 99, identical 1 |
+| 8 | noqmax | 30,000 | **all** | 56,395 req/s | 58,982 req/s | capacity 99, identical 1 |
+| 1,000,000 | noqmax | 30,000 | **all** | 53,904 req/s | 54,998 req/s | **identical 100** |
 
 That is 180,000 steps, and the oracle and the generated matcher agree on all
 of them. Throughput is wall-clock for the compiled `spec_oracle`, including
-process start. Seeds 1–100 at every row.
+process start, and is machine-specific.  The CPU used for the original figures
+was not recorded.  The fact-check rerun used an AMD Ryzen AI 9 HX 370 with
+Radeon 890M and measured 54,998–62,805 requests/s (about 55–63k).  Seeds 1–100
+at every row.
 
 **Coverage.** The oracle's result codes over the four `full` rows:
 
