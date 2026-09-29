@@ -14,6 +14,9 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 first="${1:-1}"; seeds="${2:-50}"; ops="${3:-3000}"
 out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
+ccs="${CC:-gcc clang}"
+base_cflags="-std=c11 -Wall -Wextra -Werror -Ic/gen -Ic/include"
+opt_cflags="${CFLAGS:--O2}"
 adapter=c/gen/engine_db_adapter.c
 if [ -n "${MUTANT:-}" ]; then
   cp "$adapter" "$out/engine_db_adapter.c"
@@ -45,7 +48,8 @@ if old not in s:
 open(p, "w").write(s.replace(old, new, 1))
 PY
   echo "contract mutant $MUTANT: expecting the contract test to fail"
-  gcc -std=c11 -O2 -Wall -Wextra -Werror -Ic/gen -Ic/include -o "$out/ct.mutant" \
+  mutant_cc="${CC:-gcc}"; set -- $mutant_cc; mutant_cc="$1"
+  "$mutant_cc" $base_cflags $opt_cflags -o "$out/ct.mutant" \
     tests/contract/contract_test.c "$adapter" c/src/matching_engine_gen.c
   if "$out/ct.mutant" 1 1 300 5; then
     echo "contract mutant $MUTANT NOT caught"; exit 1
@@ -53,8 +57,8 @@ PY
     echo "contract mutant $MUTANT caught"; exit 0
   fi
 fi
-for cc in gcc clang; do
-  $cc -std=c11 -O2 -Wall -Wextra -Werror -Ic/gen -Ic/include -o "$out/ct.$cc" \
+for cc in $ccs; do
+  $cc $base_cflags $opt_cflags -o "$out/ct.$cc" \
     tests/contract/contract_test.c "$adapter" c/src/matching_engine_gen.c
   for cap in 0 1 2 5 16 64; do
     echo "[$cc]"; "$out/ct.$cc" "$first" "$seeds" "$ops" "$cap"

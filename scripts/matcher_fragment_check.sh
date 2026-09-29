@@ -10,8 +10,11 @@ lake build Matcher.Example >/dev/null
 lake env lean --run lean/Matcher/Example.lean > "$out/fragment_example.c"
 for cc in gcc clang; do
   if command -v "$cc" >/dev/null; then
-    "$cc" -std=c11 -Wall -Wextra -Werror -Ic/gen -c "$out/fragment_example.c" -o "$out/fragment_example_$cc.o"
-    echo "fragment check: $cc OK"
+    for opt in -O0 -O2; do
+      "$cc" -std=c11 -Wall -Wextra -Werror "$opt" -Ic/gen -c "$out/fragment_example.c" \
+        -o "$out/fragment_example_${cc}_${opt#-}.o"
+      echo "fragment check: $cc $opt OK"
+    done
   else
     echo "fragment check: $cc not found" >&2
     exit 1

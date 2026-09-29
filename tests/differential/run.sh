@@ -14,10 +14,11 @@ cd "$(dirname "$0")/../.."
 first="${1:-1}"; seeds="${2:-20}"; len="${3:-300}"; cap="${4:-8}"; profile="${5:-full}"
 out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
 lake build spec_oracle >/dev/null
-CF="-std=c11 -O2 -Wall -Wextra -Werror -Ic/gen -Ic/include"
-cc $CF -DRUN_GEN -o "$out/gen" tests/differential/runner.c c/gen/matcher.c c/gen/engine_db_adapter.c c/src/matching_engine_gen.c
-cc $CF -DRUN_HW -o "$out/hw" tests/differential/runner.c c/src/matching_engine.c c/src/matching_engine_gen.c
-cc $CF -o "$out/tov" tests/differential/total_overflow.c c/src/matching_engine.c c/src/matching_engine_gen.c
+cc="${CC:-cc}"
+CF="-std=c11 -Wall -Wextra -Werror -Ic/gen -Ic/include ${CFLAGS:--O2}"
+"$cc" $CF -DRUN_GEN -o "$out/gen" tests/differential/runner.c c/gen/matcher.c c/gen/engine_db_adapter.c c/src/matching_engine_gen.c
+"$cc" $CF -DRUN_HW -o "$out/hw" tests/differential/runner.c c/src/matching_engine.c c/src/matching_engine_gen.c
+"$cc" $CF -o "$out/tov" tests/differential/total_overflow.c c/src/matching_engine.c c/src/matching_engine_gen.c
 "$out/tov"   # the handwritten engine's latent level-total overflow (EVIDENCE.md §2)
 steps=0; oracle_ns=0; fail=0
 : > "$out/hwclass.txt"; : > "$out/cov.txt"

@@ -12,6 +12,24 @@ Plan v2 §3 lists what the refinement theorem (`matcher_refines`,
 Phase 5 tests items 1–3 and, through item 2, exercises item 4. Every suite is
 green. The whole set runs with `tests/run_all.sh`.
 
+**Sanitizer follow-up.** The contract and differential runners accept `CC`
+and additional `CFLAGS` (their defaults remain the recorded compilers and
+`-O2`).  On the environment below, this reduced run completed with no ASan or
+UBSan diagnostic:
+
+```text
+CC=gcc CFLAGS="-O1 -g -fsanitize=undefined,address -fno-sanitize-recover=all" \
+  tests/contract/run.sh 1 2 300
+# capacities 0,1,2,5,16,64: all laws hold
+
+CC=gcc CFLAGS="-O1 -g -fsanitize=undefined,address -fno-sanitize-recover=all" \
+  tests/differential/run.sh 1 3 100 8
+# oracle and generated matcher agree on all 300 steps
+```
+
+This is evidence about the adapter and handwritten data layer on the exercised
+paths; it is not part of the Lean theorem.
+
 **Environment.** gcc 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1), clang 19.1.1
 (Ubuntu 1ubuntu1~24.04.2), Lean v4.26.0, Python 3.12.3, pycparser 3.00, Linux
 7.0.0 x86_64. Recorded on 2026-09-28.
