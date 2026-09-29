@@ -26,6 +26,15 @@
 - `lakefile.toml`: the `Walk` library (`globs = ["Walk.+"]`) is in
   `defaultTargets`.
 
+### Findings (for EVIDENCE.md)
+
+- **The price trees are an unbalanced binary search tree.**
+  - `tree_insert` (`c/src/matching_engine_gen.c:305`) and `tree_remove` (`:336`) do no rotation and keep no height or colour field.
+  - On a monotone price sequence the tree degenerates to a list.
+  - `tree_find` and `EngineDb_bids_Best`/`EngineDb_asks_Best` (a walk down one spine) then take time linear in the number of levels.
+  - Correctness is unaffected: the contract laws do not constrain complexity, and the contract suite passes.
+- **The data layer is discharged on the AMCC side.** This means proving that the data layer meets the EngineDb contract. AMCC already has verified `Llist`, `Pool` and `Thash` templates and the forward-simulation machinery. No separate pool language is to be built in this repository.
+
 ## Fact-check remediation
 
 **Date:** 2026-09-28.
