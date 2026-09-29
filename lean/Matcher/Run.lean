@@ -263,7 +263,7 @@ theorem bookView_iff (b1 b2 : BookState) : bookView b1 = bookView b2 ↔ nB b1 =
 -- ============================================================================
 
 theorem allBookOrders_nB (b : BookState) : allBookOrders (nB b) = (allBookOrders b).map nO := by
-  simp [allBookOrders, nB, List.flatMap_map, List.map_flatMap, nL, Function.comp_def]
+  simp [allBookOrders, nB, List.flatMap_map, List.map_flatMap, nL]
 
 theorem idOnBook_nB (b : BookState) (n : Nat) : idOnBook (nB b) n = idOnBook b n := by
   simp [idOnBook, allBookOrders_nB, List.any_map, Function.comp_def]
@@ -281,7 +281,7 @@ theorem postOnlyCode_nB (o : Order) (b : BookState) : postOnlyCode o (nB b) = po
 theorem computeMatchFuel_nB (b : BookState) (s : Side) :
     computeMatchFuel (nB b) s = computeMatchFuel b s := by
   unfold computeMatchFuel contraLevels
-  cases s <;> simp [nB, List.foldl_map, nL, Function.comp_def]
+  cases s <;> simp [nB, List.foldl_map, nL]
 
 theorem insertDesc_nL (o : Order) (p : Nat) : ∀ (L : List PriceLevel),
     (insertDesc L o p).map nL = insertDesc (L.map nL) (nO o) p

@@ -377,7 +377,7 @@ theorem umin_le_left (a b : UInt64) : (umin a b).toNat ≤ a.toNat := by rw [umi
 theorem umin_le_right (a b : UInt64) : (umin a b).toNat ≤ b.toNat := by rw [umin_toNat]; omega
 
 theorem lookup_min : lookupFun program "gen_min_u64" = .ok minFun := by
-  simp (config := {decide := true}) [lookupFun, program, List.find?, minFun]
+  simp (config := {decide := true}) [lookupFun, program, minFun]
 
 theorem ev_min {h : OrderH} {row : OrderRow} (hp : L.passive = some h) (hlo : liveO (view s) h = true)
     (hr : readOrder s h = some row) :

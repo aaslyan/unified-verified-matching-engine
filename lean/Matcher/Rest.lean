@@ -538,7 +538,7 @@ theorem mem_join_queue (x : LevelH) (y : OrderH) :
   simp only [joinDb]
   by_cases hx : x = l
   · subst hx; simp
-  · simp [upd_other _ _ hx, hx]
+  · simp [hx]
 
 theorem join_queued (y : OrderH) : (joinDb D l h).queued y ↔ D.queued y ∨ y = h := by
   constructor
@@ -611,7 +611,7 @@ theorem join_restingCount (hw : D.WF) (hl : l ∈ D.tree t) :
   | bids => rw [other .asks (by decide)]; omega
   | asks => rw [other .bids (by decide)]; omega
 
-theorem alloc_clientInv {db : Db} (hw : db.WF) (hc : ClientInv db) (hf : db.orders h = none) :
+theorem alloc_clientInv {db : Db} (_hw : db.WF) (hc : ClientInv db) (hf : db.orders h = none) :
     ClientInv (allocDb db h row) where
   level_nonempty := hc.level_nonempty
   queue_in_tree := hc.queue_in_tree
@@ -642,7 +642,7 @@ theorem newLevel_clientInvM {db : Db} {lnew : LevelH} {p : UInt64} (hw : db.WF) 
     simp only [levelDb]
     by_cases ht : t' = t
     · subst ht; simp [upd_same]
-    · simp [upd_other _ _ ht, ht]
+    · simp [ht]
   have lp : ∀ x, x ≠ lnew → (levelDb db t lnew p).levelPrice x = db.levelPrice x := by
     intro x hx; simp [Db.levelPrice, levelDb, upd_other _ _ hx]
   have lpn : (levelDb db t lnew p).levelPrice lnew = p := by simp [Db.levelPrice, levelDb]
@@ -761,7 +761,7 @@ theorem rest_new_side {isBuy : Bool} {lnew : LevelH} {p : UInt64} (hw : db.WF) (
   unfold absSide
   simp only [joinDb, levelDb, allocDb, upd_same, List.map_cons, sortLevels]
   congr 1
-  · simp [absLevel, absQueue, hq0, rowOf, Db.levelPrice]
+  · simp [absLevel, absQueue, hq0, Db.levelPrice]
   · congr 1
     apply List.map_congr_left
     intro y hy

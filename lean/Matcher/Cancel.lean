@@ -60,14 +60,14 @@ theorem filterMap_view {α β γ : Type} (T : List α) (G : α → Option β) (F
     | none =>
       rw [hg] at hx
       cases hp : p x
-      · simp [List.filterMap_cons, hg, List.filter_cons, hp, ih']
+      · simp [hg, hp, ih']
       · simp [hp] at hx
     | some y =>
       rw [hg] at hx
       cases hp : p x
       · simp [hp] at hx
       · simp only [hp, if_true, Option.map_some, Option.some.injEq] at hx
-        simp [List.filterMap_cons, hg, List.filter_cons, hp, ih', hx]
+        simp [hg, hp, ih', hx]
 
 theorem prioB_asymm {t : Tree} {p q : Nat} (h₁ : prioB t p q = true) (h₂ : prioB t q p = true) :
     False := by
@@ -107,7 +107,7 @@ def cancelDb (db : Db) (t0 : Tree) (l : LevelH) (h : OrderH) : Db :=
     resting order. -/
 theorem resting_id_unique {db : Db} (hw : db.WF) (hc : ClientInv db)
     {t t' : Tree} {l l' : LevelH} {h h' : OrderH}
-    (hl : l ∈ db.tree t) (hh : h ∈ db.queue l) (hl' : l' ∈ db.tree t') (hh' : h' ∈ db.queue l')
+    (_hl : l ∈ db.tree t) (hh : h ∈ db.queue l) (_hl' : l' ∈ db.tree t') (hh' : h' ∈ db.queue l')
     (he : (rowOf db h').id.toNat = (rowOf db h).id.toNat) : h' = h := by
   have hash1 := (hc.hash_iff_queued h).mpr ⟨l, hh⟩
   have hash2 := (hc.hash_iff_queued h').mpr ⟨l', hh'⟩
@@ -655,7 +655,7 @@ theorem cancel_restingCount (hw : db.WF) (hl : l ∈ db.tree t0) (hh : h ∈ db.
   | bids => rw [other .asks (by decide)]; omega
   | asks => rw [other .bids (by decide)]; omega
 
-theorem cancel_tree_length (hw : db.WF) (hl : l ∈ db.tree t0) :
+theorem cancel_tree_length (_hw : db.WF) (hl : l ∈ db.tree t0) :
     ((cancelDb db t0 l h).tree .bids ++ (cancelDb db t0 l h).tree .asks).length +
       (if Emptied db l h then 1 else 0) = (db.tree .bids ++ db.tree .asks).length := by
   by_cases he : Emptied db l h

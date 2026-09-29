@@ -367,7 +367,7 @@ theorem postOnly_reject_agrees {b : BookState} {o : Order}
       cases ht : o.orderType <;> first | rfl | exact absurd ht hstop.1 | exact absurd ht hstop.2
     have hwc : wouldCross { o with id := o.id, timestamp := b.clock } { b with nextId := o.id } = true := by
       rw [← hcr]; rfl
-    simp only [hns, hpo, Bool.false_eq_true, ↓reduceIte, ite_true]
+    simp only [hns, hpo, Bool.false_eq_true, ↓reduceIte]
     split
     · simp
     · rename_i hn; exact absurd hwc hn
@@ -484,7 +484,7 @@ theorem processB_trades_ok (cap : Nat) (b : BookState) (req : Req) :
     simp only
     split
     · simp [rejectWith, PostOnlyGuarantee, STPGuarantee]
-    · simp [rejectWith, PostOnlyGuarantee, STPGuarantee]
+    · simp [PostOnlyGuarantee, STPGuarantee]
 
 /-- Run a request sequence from the empty book. -/
 def runB (cap : Nat) : BookState → List Req → BookState
@@ -494,7 +494,7 @@ def runB (cap : Nat) : BookState → List Req → BookState
 theorem runB_ProcessInv (cap : Nat) : ∀ (reqs : List Req) (b : BookState),
     ProcessInv b → ProcessInv (runB cap b reqs)
   | [], _, h => h
-  | r :: rs, b, h => runB_ProcessInv cap rs _ (processB_preserves_ProcessInv cap r h)
+  | r :: rs, _, h => runB_ProcessInv cap rs _ (processB_preserves_ProcessInv cap r h)
 
 /-- **Reachable states of `processB`.** Every book reached from the empty book
     by any sequence of requests satisfies the full §13 book invariant. -/

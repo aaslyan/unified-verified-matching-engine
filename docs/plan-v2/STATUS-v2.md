@@ -1,5 +1,19 @@
 # STATUS-v2
 
+## Fact-check remediation
+
+**Date:** 2026-09-28.
+
+- Lean linter cleanup: a clean `lake build` reported 41 warnings in this
+  repository before the mechanical cleanup and 0 afterward.  The same builds
+  reported 13 warnings from the sibling `../amcc` dependency; those warnings
+  are outside this repository and were left unchanged.  The printed axiom sets
+  of `matcher_refines`, `inv_init`, `matcher_run_refines`, `processB_congr`,
+  `doMatch_fuel_stable`, and the `EngineDb (AbsStore cap)` instance are
+  unchanged.
+
+---
+
 ## Phase 5 closing additions
 
 **Date:** 2026-09-28. **Base commit:** `285b0a6`.

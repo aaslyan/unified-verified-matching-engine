@@ -132,7 +132,7 @@ theorem conflict_iff {r : CRequest} {o1 inc resting : Order} {t : Tree} {row : O
     rw [hp]
     by_cases hrow : row.account = 0
     · have : r.account ≠ row.account := fun e => ha (e.trans hrow)
-      simp [stpGroupOf, ha, hrow, this]
+      simp [stpGroupOf, ha, hrow]
     · simp only [stpGroupOf, ha, hrow, if_false]
       by_cases e : r.account = row.account
       · simp [e, hrow]
@@ -230,7 +230,7 @@ theorem ordV_congr {db db' : Db} {t : Tree} {y : OrderH} (h : db'.orders y = db.
 theorem sinv_drop {c : OCtx} {s s' : S} {contra : List PriceLevel} {h : OrderH}
     {qs : List OrderH} {level : PriceLevel} {resting : Order} {restOrders : List Order}
     (hc : c.Ok) (hs : SInv c s contra) (hq : (view s).queue c.l = h :: qs)
-    (hcontra : contra = level :: c.RL) (hlv : level.orders = resting :: restOrders)
+    (_hcontra : contra = level :: c.RL) (_hlv : level.orders = resting :: restOrders)
     (hro : restOrders.map orderView = qs.map (ordV (view s) c.t))
     (hpx : level.price = ((view s).levelPrice c.l).toNat)
     (hv' : view s' = dropDb (view s) c.l h) (hw' : (view s').WF) (hcount : count s' + 1 = count s)
@@ -284,7 +284,7 @@ theorem sinv_setRem {c : OCtx} {s s' : S} {contra : List PriceLevel} {h : OrderH
     {qs : List OrderH} {level : PriceLevel} {resting' : Order} {restOrders : List Order}
     {row : OrderRow} {p : UInt64}
     (hc : c.Ok) (hs : SInv c s contra) (hq : (view s).queue c.l = h :: qs)
-    (hcontra : contra = level :: c.RL) (hro : restOrders.map orderView = qs.map (ordV (view s) c.t))
+    (_hcontra : contra = level :: c.RL) (hro : restOrders.map orderView = qs.map (ordV (view s) c.t))
     (hpx : level.price = ((view s).levelPrice c.l).toNat)
     (hrow : (view s).orders h = some row) (hp0 : 0 < p) (hp : p ≤ row.remaining)
     (hr' : orderView resting' = orderView (restingOrder c.t { row with remaining := p } 0))
@@ -615,10 +615,10 @@ theorem core_facts {c : OCtx} {s : S} {L : Loc} {ts : List TradeObs} {inc : Orde
   · rw [hF, hvis, hir]
   · rw [s1, hF, hvis, hir]
   · rw [s2, hF, hvis, hir, hrr]
-  · rw [hv1]; try simp [liveO, setRemDb]
+  · rw [hv1]; try simp [liveO]
   · have := hf.hqd
     rw [hv1]; simpa [queuedB, setRemDb] using this
-  · rw [readOrder_law, hv1]; simp [setRemDb]
+  · rw [readOrder_law, hv1]; simp
   · rw [hv1]; exact hf.hhash
   · have := hf.hll; rw [hv1]; simpa [liveL, setRemDb] using this
   · rw [readLevel_law, readLevel_law, hv1]

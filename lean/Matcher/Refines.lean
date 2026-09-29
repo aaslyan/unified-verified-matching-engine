@@ -245,7 +245,7 @@ theorem processB_static {cap : Nat} {b : BookState} {r : CRequest} {c : ResultCo
         have hq : r.qty ≠ 0 := fun hx => hall (Or.inr (Or.inr (Or.inl hx)))
         have hpr : ¬(r.orderType ≠ 1 ∧ r.price = 0) := fun hx => hall (Or.inr (Or.inr (Or.inr hx)))
         unfold staticCode at h
-        simp only [h1, hs, hp, hq, hpr, not_true_eq_false, not_false_eq_true, if_false] at h
+        simp only [h1, hs, hp, hq, hpr, not_true_eq_false, if_false] at h
         by_cases hqm : qmax cap < r.qty.toNat
         · simp [hqm]
         · simp [hqm] at h
@@ -482,7 +482,7 @@ theorem bookSize_absBook (db : Db) : bookSize (absBook db) = restingCount db := 
   simp
 
 /-- The ids on the decoded book are the ids of the queued rows. -/
-theorem idOnBook_absBook {db : Db} (hc : ClientInv db) (n : Nat) :
+theorem idOnBook_absBook {db : Db} (_hc : ClientInv db) (n : Nat) :
     idOnBook (absBook db) n = true ↔
       ∃ t, ∃ l ∈ db.tree t, ∃ h ∈ db.queue l, ((db.orders h).getD OrderRow.dflt).id.toNat = n := by
   have side : ∀ t, (∃ o ∈ (absSide db t).flatMap PriceLevel.orders, o.id = n) ↔

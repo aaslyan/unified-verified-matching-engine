@@ -188,7 +188,7 @@ theorem rest_empty {inc : Order} {own : List PriceLevel} {trades : List Trade} {
     rest inc own [] trades tm = term inc own [] trades tm := by
   unfold rest dm term
   rw [doMatch.eq_2, if_neg (by simp [hd])]
-  cases hs : inc.side <;> simp [bidsOf, asksOf, hs]
+  cases hs : inc.side <;> simp [bidsOf, asksOf]
 
 theorem rest_noprice {inc : Order} {own : List PriceLevel} {level : PriceLevel}
     {rl : List PriceLevel} {trades : List Trade} {tm : Timestamp}
@@ -197,7 +197,7 @@ theorem rest_noprice {inc : Order} {own : List PriceLevel} {level : PriceLevel}
     rest inc own (level :: rl) trades tm = term inc own (level :: rl) trades tm := by
   unfold rest dm term
   rw [doMatch.eq_2, if_neg (by simp [hd])]
-  cases hs : inc.side <;> simp [bidsOf, asksOf, hs, hp]
+  cases hs : inc.side <;> simp [bidsOf, asksOf, hp]
 
 -- ============================================================================
 -- One step per branch
@@ -239,7 +239,7 @@ theorem step_cancelNew (hA : AtHead inc level resting restOrders)
   unfold dm term
   cases hs : inc.side <;>
   · simp only [doMatch, bidsOf, asksOf, hs, hA.head, hA.price]
-    simp [hA.notDone, hA.visible, hc, hp]
+    simp [hA.notDone, hc, hp]
 
 theorem step_cancelOld (hA : AtHead inc level resting restOrders)
     (hc : selfTradeConflict inc resting = true)
@@ -250,7 +250,7 @@ theorem step_cancelOld (hA : AtHead inc level resting restOrders)
   unfold dm drop1
   cases hs : inc.side <;>
   · simp only [doMatch, bidsOf, asksOf, hs, hA.head, hA.price]
-    simp [hA.notDone, hA.visible, hc, hp]
+    simp [hA.notDone, hc, hp]
 
 theorem step_cancelBoth (hA : AtHead inc level resting restOrders)
     (hc : selfTradeConflict inc resting = true)
@@ -262,7 +262,7 @@ theorem step_cancelBoth (hA : AtHead inc level resting restOrders)
   unfold dm term drop1
   cases hs : inc.side <;>
   · simp only [doMatch, bidsOf, asksOf, hs, hA.head, hA.price]
-    simp [hA.notDone, hA.visible, hc, hp]
+    simp [hA.notDone, hc, hp]
 
 /-- The incoming order after an STP decrement of `q`. -/
 def decInc (inc : Order) (q : Nat) : Order :=
@@ -322,7 +322,7 @@ theorem step_fill_full (hA : AtHead inc level resting restOrders)
   unfold dm drop1 fillTrade
   cases hs : inc.side <;>
   · simp only [doMatch, bidsOf, asksOf, hs, hA.head, hA.price]
-    simp [hA.notDone, hc, hfull, hr, hv]
+    simp [hA.notDone, hc, hfull, hv]
 
 theorem step_fill_part (hA : AtHead inc level resting restOrders)
     (hc : selfTradeConflict inc resting = false)
@@ -341,7 +341,7 @@ theorem step_fill_part (hA : AtHead inc level resting restOrders)
   unfold dm fillTrade
   cases hs : inc.side <;>
   · simp only [doMatch, bidsOf, asksOf, hs, hA.head, hA.price]
-    simp [hA.notDone, hc, hpart, hr, hv, hA.noIceberg]
+    simp [hA.notDone, hc, hpart, hv, hA.noIceberg]
 
 -- The measure goes down on every step.
 
@@ -409,7 +409,7 @@ theorem processWithId_match {b : BookState} {o : Order} (hstops : b.stops = [])
   simp only
   simp only [o1Of] at hk
   rw [hk, processOrder.eq_2]
-  simp only [o1Of, hns', hpo, hfok', hmq, hmtl', Bool.false_eq_true, if_false, Option.isSome_none,
+  simp only [hns', hpo, hfok', hmq, hmtl', Bool.false_eq_true, if_false, Option.isSome_none,
     Bool.false_and]
   generalize hM : matchOrder _ _ _ = M
   have hMe : M = mrOf b o := by
@@ -439,7 +439,7 @@ theorem computeMatchFuel_pos (b : BookState) (s : Side) : ∃ k, computeMatchFue
 /-- **Accepted post-only** (it does not cross): the spec's matching run is
     empty, and `processWithId` rests the order, which is what `dispose` does
     with the empty run. Same shape as `processWithId_match`. -/
-theorem processWithId_postOnly {b : BookState} {o : Order} (hstops : b.stops = [])
+theorem processWithId_postOnly {b : BookState} {o : Order} (_hstops : b.stops = [])
     (hns : o.orderType ≠ .stopLimit ∧ o.orderType ≠ .stopMarket) (hpo : o.postOnly = true)
     (hwc : wouldCross (o1Of b o) { b with nextId := o.id } = false)
     (hrem : o.remainingQty ≠ 0) (hst : o.status = .new_) (htif : o.tif = .gtc)
@@ -462,18 +462,18 @@ theorem processWithId_postOnly {b : BookState} {o : Order} (hstops : b.stops = [
     cases hs : o.side
     · rw [hs] at hwc
       cases ha : b.asks with
-      | nil => simp [o1Of, hs, ha]
+      | nil => simp [o1Of, hs]
       | cons l ls =>
         rw [ha] at hwc
         simp at hwc
-        simp [o1Of, hs, ha, canMatchPrice, hp]; omega
+        simp [o1Of, hs, canMatchPrice, hp]; omega
     · rw [hs] at hwc
       cases hb : b.bids with
-      | nil => simp [o1Of, hs, hb]
+      | nil => simp [o1Of, hs]
       | cons l ls =>
         rw [hb] at hwc
         simp at hwc
-        simp [o1Of, hs, hb, canMatchPrice, hp]; omega
+        simp [o1Of, hs, canMatchPrice, hp]; omega
   -- process rests the order
   obtain ⟨k, hk⟩ : ∃ k, computeProcessFuel { b with nextId := o.id } (o1Of b o) = k + 1 :=
     ⟨_, rfl⟩

@@ -279,7 +279,7 @@ theorem drop_restingCount (hw : db.WF) (hl : l ∈ db.tree t) (hh : h ∈ db.que
   | bids => rw [other .asks (by decide)]; show _ + _ + 1 = _; omega
   | asks => rw [other .bids (by decide)]; show _ + _ + 1 = _; omega
 
-theorem setRem_clientInvM (hc : ClientInvM db l) (hh : h ∈ db.queue l) (hl : l ∈ db.tree t)
+theorem setRem_clientInvM (hc : ClientInvM db l) (hh : h ∈ db.queue l) (_hl : l ∈ db.tree t)
     {row : OrderRow} (hrow : db.orders h = some row) {p : UInt64} (hp0 : 0 < p)
     (hp : p ≤ row.remaining) :
     ClientInvM (setRemDb db h { row with remaining := p }) l where
@@ -342,7 +342,7 @@ theorem free_clientInv (hw : db.WF) (hc : ClientInvM db l) (hl : l ∈ db.tree t
       obtain ⟨ha, hane⟩ := (memT _ _).mp ha
       rw [lp lb hbne, lp la hane]; exact hc.uncrossed lb hb la ha }
 
-theorem free_restingCount (hw : db.WF) (hl : l ∈ db.tree t) (he : db.queue l = []) :
+theorem free_restingCount (_hw : db.WF) (hl : l ∈ db.tree t) (he : db.queue l = []) :
     restingCount (freeDb db t l) = restingCount db := by
   unfold restingCount
   simp only [List.map_append, List.sum_append_nat, freeDb]

@@ -250,7 +250,7 @@ theorem ev_po_skip (isBuy : Bool) (h3 : r.orderType ≠ 3) :
 
 /-- The best contra price the post-only check sees, and the spec's `wouldCross`. -/
 theorem wouldCross_iff {isBuy : Bool} {o : Order} (hw : (view s).WF) (hsd : SpecOrd r o)
-    (hbuy : isBuy = decide (r.side = 0)) (hs01 : r.side = 0 ∨ r.side = 1) (h3 : r.orderType = 3) :
+    (hbuy : isBuy = decide (r.side = 0)) (_hs01 : r.side = 0 ∨ r.side = 1) (h3 : r.orderType = 3) :
     (tBest s (contraT isBuy) = none → wouldCross o (absBook (view s)) = false) ∧
     (∀ l lrow, tBest s (contraT isBuy) = some l → readLevel s l = some lrow →
       wouldCross o (absBook (view s)) = decide (crossB isBuy lrow.price r.price)) := by
