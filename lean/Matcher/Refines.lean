@@ -39,6 +39,35 @@ def argsOf : Req → List Val
                  .u64 r.price, .u64 r.qty]
   | .cancel id => [.u64 id]
 
+/-- If `runEntry` completes successfully at some fuel, it has the same result
+    at every larger fuel.  The fuel bounds recursive interpreter evaluation:
+    statement sequencing, branches, function calls, and loop iterations.  It
+    is not a matcher capacity or a C run-time limit. -/
+theorem runEntry_fuel_stable {P : Program} {f f' : Nat} {fname : Ident}
+    {args : List Val} {s : S} {r}
+    (h : runEntry P f fname args s = .ok r) (hle : f ≤ f') :
+    runEntry P f' fname args s = .ok r := by
+  unfold runEntry at h ⊢
+  cases hf : lookupFun P fname with
+  | error e => rw [hf] at h; cases h
+  | ok fd =>
+    rw [hf] at h
+    simp only [bind, Except.bind] at h ⊢
+    cases hp : bindParams fd.params args with
+    | error e => rw [hp] at h; cases h
+    | ok penv =>
+      rw [hp] at h
+      simp only at h ⊢
+      cases he : execStmt P f fd.body
+          { store := s,
+            env := penv ++ fd.locals.map fun (x, t) => (x, t.default),
+            trades := [] } with
+      | error e => rw [he] at h; cases h
+      | ok x =>
+        rw [he] at h
+        rw [execStmt_mono P he hle]
+        exact h
+
 /-- The entry environment of `gen_process_order`. -/
 def orderEnv (r : CRequest) : List (Ident × Val) :=
   [("id", .u64 r.id), ("account", .u64 r.account), ("side", .code r.side),
@@ -73,7 +102,10 @@ def specStep (s : S) (req : Req) : ResultCode × ProcessResult :=
 
 /-- **One step refines `processB`.** Some fuel runs the matcher to a result
     code, trades and store that `processB` agrees with on `Obs`, and `Inv`
-    holds again. -/
+    holds again.  The fuel is existential because the theorem establishes that
+    the interpreter terminates without exposing a fixed evaluation budget as
+    part of the matcher interface; `runEntry_fuel_stable` shows that any larger
+    budget produces the same successful result. -/
 def Refines (s : S) (req : Req) : Prop :=
   ∃ f s' ts, runEntry program f (entryOf req) (argsOf req) s =
       .ok (.code (codeOf (specStep s req).1), s', ts) ∧

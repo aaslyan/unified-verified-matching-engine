@@ -11,6 +11,11 @@
   of `matcher_refines`, `inv_init`, `matcher_run_refines`, `processB_congr`,
   `doMatch_fuel_stable`, and the `EngineDb (AbsStore cap)` instance are
   unchanged.
+- Interpreter fuel is documented at `Refines`: it bounds recursive evaluation
+  by the Lean interpreter and is existential so no fixed evaluation budget is
+  exposed by the refinement statement.  `runEntry_fuel_stable` proves that a
+  successful result is unchanged at every larger fuel; `#print axioms` reports
+  `[propext, Quot.sound]`.
 
 ---
 
