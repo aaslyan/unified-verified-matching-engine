@@ -1,5 +1,31 @@
 # STATUS-v2
 
+## Walk-spec merge — reference commit for the dossier
+
+**Date:** 2026-09-28. **Reference commit:** `a14da7e` (merge of `walk-spec` into
+`main`, no squash; `walk-spec` rebased onto `bbaffb4` first).
+
+- Adds a second proof of `matcher_refines` through the walking spec
+  (`lean/Walk/`, `docs/walk-spec/`; result: `docs/walk-spec/RESULT-W.md`).
+  `Walk.matcher_refines` has `main`'s statement (`type_of%` check by `rfl`).
+  The proof is independent of `main`'s proof on the matching path; it shares the
+  entry rejections (`refines_static`, `refines_duplicate`, `refines_capacity`),
+  cancel (`refines_cancel`) and `MatcherSpec.rest_step`.
+- Checks on the rebased branch, whose tree equals the merge commit's:
+  - `lake build` clean (115 jobs), 0 warnings in this repository's files; the
+    13 `../amcc` warnings are unchanged;
+  - `#print axioms` of `MatcherAccept.matcher_refines`,
+    `MatcherRun.matcher_run_refines` and `Walk.matcher_refines`:
+    `[propext, Classical.choice, Quot.sound]`, unchanged;
+  - `docs/walk-spec/walk_diff.sh` (144,000 steps, D1 = D2 = 0) and `MUTANT=1|2`:
+    output identical to before the rebase;
+  - `docs/walk-spec/a4/` scripts: `tables.md` identical. `decls.tsv` differs only
+    in `Matcher/Refines.lean` positions and in declarations reached by neither
+    theorem (`runEntry_fuel_stable`, auxiliaries); it was regenerated;
+  - `tests/run_all.sh`: exit 0 (printer, contract, differential, semantics).
+- `lakefile.toml`: the `Walk` library (`globs = ["Walk.+"]`) is in
+  `defaultTargets`.
+
 ## Fact-check remediation
 
 **Date:** 2026-09-28.
