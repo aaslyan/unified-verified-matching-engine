@@ -16,7 +16,7 @@ ProcessB.Req.rec	Bridge.ProcessB	42	46	true	true
 MatcherInner.OCtx.noConfusion	Matcher.Inner	160	171	false	false
 ProcessResult.noConfusionType	MatchingEngine.Process	0	0	false	false
 doMatch_preserves_inc_tif	MatchingEngine.Theorems	1715	1721	false	false
-MatcherRefines.order_entry_env	Matcher.Refines	116	121	true	true
+MatcherRefines.order_entry_env	Matcher.Refines	148	153	true	true
 MatcherRest.appAt.eq_1	Matcher.Rest	0	0	false	false
 Matcher.runExt_qFirst	Matcher.Logic	452	454	true	true
 MatcherInner.inner_fill._proof_1_5	Matcher.Inner	0	0	false	true
@@ -128,7 +128,7 @@ MatcherRun.nO_side	Matcher.Run	52	52	false	false
 Matcher.Outcome.normal.elim	Matcher.Lang	180	180	false	false
 MatcherCancel.absQueue_filter_views.match_1_1	Matcher.Cancel	0	0	true	true
 Matcher.liveLevel.match_1	Matcher.Lang	0	0	true	true
-MatcherRefines.mem_insLevel_iff	Matcher.Refines	432	433	false	false
+MatcherRefines.mem_insLevel_iff	Matcher.Refines	464	465	false	false
 instReprBookState	MatchingEngine.Book	24	24	false	false
 MatcherStore.InvM.recOn	Matcher.StoreStep	391	399	false	false
 Matcher.Stmt.assign.sizeOf_spec	Matcher.Lang	0	0	false	false
@@ -142,7 +142,7 @@ Walk.outerRun_ok._proof_1_8	Walk.Basic	0	0	true	false
 MatcherRefines.entryOf.match_1	Matcher.Refines	0	0	true	true
 Matcher.Stmt.call.inj	Matcher.Lang	0	0	false	false
 MatcherSpec.processWithId_postOnly._proof_1_11	Matcher.SpecStep	0	0	true	true
-MatcherRefines.prefix_run	Matcher.Refines	352	426	true	true
+MatcherRefines.prefix_run	Matcher.Refines	384	458	true	true
 EngineDbApi.writeLevel.post	Bridge.EngineDbApi	201	202	true	true
 _private.Matcher.Refines.0.Matcher.bindParams.match_1.splitter	Matcher.Refines	0	0	false	false
 Walk.WFr.stops	Walk.RefineOuter	33	33	true	false
@@ -323,7 +323,7 @@ _private.Matcher.Run.0.insertOrder.match_1.eq_2	Matcher.Run	0	0	false	false
 MatcherRest.rest_run._proof_1_8	Matcher.Rest	0	0	true	true
 Matcher.Bound.capPlus.sizeOf_spec	Matcher.Lang	0	0	false	false
 Timestamp	MatchingEngine.Basic	11	11	true	true
-MatcherRefines.refines_capacity	Matcher.Refines	695	713	true	true
+MatcherRefines.refines_capacity	Matcher.Refines	727	745	true	true
 EngineDbAbs.instEngineDbAbsStore._proof_16	Bridge.EngineDbAbs	0	0	false	false
 Walk.WO.book	Walk.RefineOuter	169	169	true	false
 MatcherStore.levels_le_count	Matcher.StoreStep	409	429	true	true
@@ -351,6 +351,7 @@ MatcherAccept.Static.mk._flat_ctor	Matcher.Accept	0	0	false	false
 TimeInForce.ctorIdx	MatchingEngine.Basic	0	0	true	true
 _private.Matcher.Logic.0.Matcher.loopStep.match_3.eq_1	Matcher.Logic	0	0	false	false
 OrderStatus.casesOn	MatchingEngine.Basic	36	42	true	true
+MatcherRefines.runEntry_fuel_stable.match_1_3	Matcher.Refines	0	0	false	false
 instDecidableEqOrder	MatchingEngine.Order	32	32	true	true
 EngineDbApi.Tree.ctorElim	Bridge.EngineDbApi	73	77	false	false
 MatcherSpec.step_decrement_part	Matcher.SpecStep	287	304	true	true
@@ -365,7 +366,7 @@ Matcher.Err.overflow.sizeOf_spec	Matcher.Lang	0	0	false	false
 processCascade.eq_3	MatchingEngine.TheoremsFuel	0	0	false	false
 MatcherRun.specTrace.eq_1	Matcher.Run	0	0	false	false
 Matcher.instDecidableEqVal.decEq._proof_23	Matcher.Lang	0	0	false	false
-MatcherRefines.dupSt	Matcher.Refines	628	629	true	true
+MatcherRefines.dupSt	Matcher.Refines	660	661	true	true
 Side.buy	MatchingEngine.Basic	17	17	true	true
 Matcher.Ext.tRemove.noConfusion	Matcher.Lang	0	0	false	false
 STPGuarantee.eq_1	Bridge.ProcessB	0	0	false	false
@@ -378,7 +379,7 @@ MatcherStore.InvM.levels_resting	Matcher.StoreStep	396	396	true	true
 Matcher.instDecidableEqVal.decEq._proof_1	Matcher.Lang	0	0	false	false
 insertOrder_BookOkAt_max	MatchingEngine.TheoremsFull	919	931	false	false
 process_all_stops_sublist	MatchingEngine.TheoremsFuel	60	118	false	false
-MatcherRefines.Inv.orders_resting	Matcher.Refines	64	64	true	true
+MatcherRefines.Inv.orders_resting	Matcher.Refines	93	93	true	true
 Walk.hasId.eq_1	Walk.EquivEntry	0	0	false	false
 Matcher.Expr.un	Matcher.Lang	97	97	true	true
 _private.MatchingEngine.Theorems.0.processOrder.match_1.eq_2	MatchingEngine.Theorems	0	0	false	false
@@ -426,13 +427,13 @@ MatcherLoop.Loc.rem	Matcher.LoopEnv	144	144	true	true
 EngineDbAbs.sortLevels	Bridge.EngineDbAbs	341	344	true	true
 EngineDbApi.Tree.rec	Bridge.EngineDbApi	73	77	true	true
 EngineDbAbs.CStpMode.policy.eq_3	Matcher.Inner	0	0	false	false
-MatcherRefines.order_run	Matcher.Refines	123	129	true	true
+MatcherRefines.order_run	Matcher.Refines	155	161	true	true
 MatcherLoop.Loc.noConfusion	Matcher.LoopEnv	143	155	false	false
 EngineDbAbs.instDecidableEqCRequest.decEq._proof_8	Bridge.EngineDbAbs	0	0	false	false
 Matcher.Stmt.assign.inj	Matcher.Lang	0	0	false	false
 EngineDbAbs.OrderView	Bridge.EngineDbAbs	363	379	true	true
 EngineDbApi.hashInsert.post	Bridge.EngineDbApi	225	230	true	true
-MatcherRefines.bind_order_params	Matcher.Refines	109	114	true	true
+MatcherRefines.bind_order_params	Matcher.Refines	141	146	true	true
 convertStop_timestamp	MatchingEngine.TheoremsFull	519	523	false	false
 Walk.outer_sim	Walk.EquivMatch	653	676	true	false
 MatcherStore.prioB_of_better._proof_1_1	Matcher.StoreStep	0	0	true	true
@@ -480,7 +481,7 @@ MatcherInner.ReqOk.policy	Matcher.Inner	62	62	false	true
 Matcher.Stmt.ret.noConfusion	Matcher.Lang	0	0	false	false
 insertAsc._sunfold	MatchingEngine.Book	0	0	false	false
 BookState._sizeOf_1	MatchingEngine.Book	0	0	false	false
-MatcherRefines.Eval.when_pass	Matcher.Refines	343	345	true	true
+MatcherRefines.Eval.when_pass	Matcher.Refines	375	377	true	true
 instReprOrderType.repr	MatchingEngine.Basic	27	27	false	false
 Walk.w_side_cont._proof_1_2	Walk.Refine	0	0	true	false
 MatcherProgram.u	Matcher.Program	67	67	true	true
@@ -544,6 +545,7 @@ EngineDbAbs.toSpec_none_iff._simp_1_4	Bridge.EngineDbAbs	0	0	false	false
 EngineDbAbs.instDecidableEqCRequest.decEq._proof_6	Bridge.EngineDbAbs	0	0	false	false
 OrderType.stopLimit	MatchingEngine.Basic	25	25	true	true
 _private.Walk.EquivEntry.0.ProcessB.processB.match_5.eq_1	Walk.EquivEntry	0	0	false	false
+_private.Matcher.Refines.0.Matcher.instReprOutcome.repr.match_1.splitter	Matcher.Refines	0	0	false	false
 Matcher.OField.side.elim	Matcher.Lang	73	73	false	false
 EngineDbAbs.absQueue_fifo._proof_1_3	Bridge.EngineDbAbs	0	0	false	false
 Matcher.instDecidableEqVal.decEq._proof_16	Matcher.Lang	0	0	false	false
@@ -621,14 +623,14 @@ Walk.policy_of	Walk.EquivMatch	100	109	true	false
 Matcher.Err.arity	Matcher.Lang	176	176	true	true
 Order.WellFormed.eq_1	Bridge.EngineDbAbs	0	0	false	false
 Matcher.evalBin.eq_1	Matcher.Refines	0	0	false	false
-MatcherRefines.decodeSide_none_iff	Matcher.Refines	157	160	true	true
+MatcherRefines.decodeSide_none_iff	Matcher.Refines	189	192	true	true
 _private.Bridge.EngineDbAbs.0.EngineDbAbs.CRequest.toSpec.match_1.eq_1	Bridge.EngineDbAbs	0	0	false	false
 Matcher.Expr.ctorIdx	Matcher.Lang	0	0	false	false
 Walk.cancel	Walk.Spec	320	334	true	false
 Matcher.Expr.var	Matcher.Lang	96	96	true	true
 Matcher.Err.noFun.elim	Matcher.Lang	176	176	false	false
 EngineDbAbs.decodeSide	Bridge.EngineDbAbs	83	87	true	true
-MatcherRefines.decodeStpMode_none_iff	Matcher.Refines	162	166	true	true
+MatcherRefines.decodeStpMode_none_iff	Matcher.Refines	194	198	true	true
 MatcherInner.SInv.mem	Matcher.Inner	214	216	false	true
 matchOrder	MatchingEngine.Match	206	208	true	true
 shouldTrigger.match_1	MatchingEngine.Process	0	0	true	true
@@ -679,12 +681,12 @@ _private.Bridge.EngineDbAbs.0.EngineDbAbs.decodeOrderType.match_1.splitter	Bridg
 Matcher.instReprVal	Matcher.Lang	55	55	false	false
 MatcherLoop.Loc.victim	Matcher.LoopEnv	149	149	true	true
 _private.Matcher.Logic.0.Matcher.execStmt.match_7.eq_1	Matcher.Logic	0	0	false	false
-MatcherRefines.side_length	Matcher.Refines	468	472	true	true
+MatcherRefines.side_length	Matcher.Refines	500	504	true	true
 EngineDbAbs.better_of_not._proof_1_2	Bridge.EngineDbAbs	0	0	false	false
 EngineDbApi.EngineDb.writeOrder_law	Bridge.EngineDbApi	359	359	true	true
 EngineDbAbs.AbsStore.mk.inj	Bridge.EngineDbAbs	0	0	false	false
 doMatch_sell_preserves_bids_sorted	MatchingEngine.Theorems	1139	1221	false	false
-MatcherRefines.Eval.when_true	Matcher.Refines	267	269	true	true
+MatcherRefines.Eval.when_true	Matcher.Refines	299	301	true	true
 _private.Walk.RefineInner.0.Walk.sideL_setHeadRem.match_1.eq_2	Walk.RefineInner	0	0	false	false
 MatcherOuter.MCtx.t	Matcher.Outer	95	95	false	true
 EngineDbApi.EngineDb.count_qInsertTail	Bridge.EngineDbApi	395	395	true	true
@@ -714,7 +716,7 @@ _private.Bridge.EngineDbAbs.0.EngineDbAbs.LvPrio	Bridge.EngineDbAbs	499	499	true
 Walk.length_le_sideCount	Walk.Basic	241	248	true	false
 MatcherOuter.MCtx	Matcher.Outer	85	93	false	true
 mkMTL	MatchingEngine.Tests	53	58	false	false
-_private.Matcher.Refines.0.MatcherRefines.u8_lit	Matcher.Refines	148	149	true	true
+_private.Matcher.Refines.0.MatcherRefines.u8_lit	Matcher.Refines	180	181	true	true
 Walk.WFr.casesOn	Walk.RefineOuter	29	35	false	false
 Walk.dropBest.eq_1	Walk.EquivMatch	0	0	true	false
 _private.Walk.LogicInv.0.Matcher.loopStep.match_1.eq_1	Walk.LogicInv	0	0	false	false
@@ -760,7 +762,7 @@ Matcher.Bound.lit.inj	Matcher.Lang	0	0	false	false
 MatcherRefines.idOnBook_false_iff.match_1_1	Matcher.Refines	0	0	true	true
 Walk.WR.stop	Walk.RefineInner	47	47	true	false
 process_all_fuel_stable._proof_1_25	MatchingEngine.TheoremsFuel	0	0	false	false
-MatcherRefines.Eval.when_false	Matcher.Refines	263	265	true	true
+MatcherRefines.Eval.when_false	Matcher.Refines	295	297	true	true
 MatcherSpec.rest_noprice	Matcher.SpecStep	193	200	true	true
 Matcher.BinOp.div	Matcher.Lang	87	87	true	true
 Matcher.getOField.eq_6	Matcher.Cancel	0	0	false	false
@@ -787,7 +789,7 @@ _private.Matcher.Logic.0.Matcher.runExt.match_5.eq_6	Matcher.Logic	0	0	false	fal
 MatcherProgram.cancelOrderFun.eq_1	Matcher.Refines	0	0	false	false
 instReprPriceLevel.repr	MatchingEngine.Book	14	14	false	false
 EngineDbAbs.pickBest.eq_1	Bridge.EngineDbAbs	0	0	false	false
-MatcherRefines.Inv.wf	Matcher.Refines	62	62	true	true
+MatcherRefines.Inv.wf	Matcher.Refines	91	91	true	true
 EngineDbAbs.ClientInv_empty	Bridge.EngineDbAbs	456	462	false	false
 _private.MatchingEngine.Theorems.0.StopsNoPostOnly_of_same_stops	MatchingEngine.Theorems	3628	3632	false	false
 computeMatchFuel_gt_matchMeasure._proof_1_1	MatchingEngine.Theorems	0	0	true	true
@@ -814,7 +816,7 @@ _private.Matcher.SpecStep.0.insertOrder.match_1.eq_1	Matcher.SpecStep	0	0	false	
 EngineDbApi.orderFree.pre	Bridge.EngineDbApi	159	161	true	true
 ProcessB.ResultCode.rejectedPostOnly.sizeOf_spec	Bridge.ProcessB	0	0	false	false
 MatcherInner.inner_fill._proof_1_6	Matcher.Inner	0	0	false	true
-MatcherRefines.hashFind_isSome_iff	Matcher.Refines	524	554	true	true
+MatcherRefines.hashFind_isSome_iff	Matcher.Refines	556	586	true	true
 EngineDbApi.tInsert_preserves_WF._simp_1_1	Bridge.EngineDbApiLaws	0	0	true	true
 _private.Bridge.EngineDbAbs.0.EngineDbAbs.betterB.match_1.splitter	Bridge.EngineDbAbs	0	0	false	false
 MatcherLoop.Loc.mk	Matcher.LoopEnv	143	143	true	true
@@ -844,7 +846,7 @@ MatcherRun.runEntry_mono	Matcher.Run	557	575	false	false
 EngineDbAbs.COrderType.ioc.elim	Bridge.EngineDbAbs	58	58	false	false
 MatcherAccept.book_rest	Matcher.Accept	120	152	false	true
 MatcherSpec.mm_skip'._proof_1_1	Matcher.SpecStep	0	0	true	true
-MatcherRefines.absSide_orders_perm	Matcher.Refines	462	466	true	true
+MatcherRefines.absSide_orders_perm	Matcher.Refines	494	498	true	true
 Matcher.Ext.hashFind	Matcher.Lang	127	127	true	true
 MatcherAccept.side_cont	Matcher.Accept	294	417	false	true
 STPPolicy.ctorIdx	MatchingEngine.Basic	0	0	true	true
@@ -1008,7 +1010,7 @@ Matcher.Ty._sizeOf_1	Matcher.Lang	0	0	false	false
 MatcherProgram.sideFun.eq_1	Matcher.Refines	0	0	false	false
 ProcessResult.mk.injEq	MatchingEngine.Process	0	0	false	false
 Trade.mk._flat_ctor	MatchingEngine.Order	0	0	false	false
-MatcherRefines.bookSize_absBook	Matcher.Refines	474	482	true	true
+MatcherRefines.bookSize_absBook	Matcher.Refines	506	514	true	true
 instDecidableEqOrderStatus._proof_1	MatchingEngine.Basic	0	0	true	true
 Walk.WCore.q1	Walk.RefineInner	309	309	true	false
 Matcher.OField.qty.elim	Matcher.Lang	73	73	false	false
@@ -1211,7 +1213,7 @@ Walk.mkTrade.eq_1	Walk.RefineInner	0	0	false	false
 EngineDbAbs.mem_insLevel	Bridge.EngineDbAbs	480	491	true	true
 _private.Matcher.Refines.0.Matcher.evalBin.match_1.eq_14	Matcher.Refines	0	0	false	false
 Matcher.OField.stpMode.elim	Matcher.Lang	73	73	false	false
-MatcherRefines.Refines	Matcher.Refines	74	82	true	true
+MatcherRefines.Refines	Matcher.Refines	103	114	true	true
 Matcher.instDecidableEqLField._proof_1	Matcher.Lang	0	0	false	false
 Elegant.doMatch_trichotomy	MatchingEngine.TheoremsElegant	68	111	false	false
 Matcher.Err.overflow.elim	Matcher.Lang	175	175	false	false
@@ -1365,7 +1367,7 @@ _private.Bridge.ProcessB.0.cancelOrder.match_3.splitter	Bridge.ProcessB	0	0	fals
 Walk.modAt._unsafe_rec	Walk.Spec	0	0	false	false
 Matcher.Ext.ctorElim	Matcher.Lang	121	134	false	false
 Walk.processOrder_eq	Walk.EquivEntry	67	96	true	false
-MatcherRefines.decodeOrderType_none_iff	Matcher.Refines	151	155	true	true
+MatcherRefines.decodeOrderType_none_iff	Matcher.Refines	183	187	true	true
 Walk.innerRun._unsafe_rec	Walk.Spec	0	0	false	false
 ProcessB.ResultCode.cancelled.elim	Bridge.ProcessB	50	50	false	false
 Walk.tBest_eq	Walk.Basic	45	45	true	false
@@ -1415,7 +1417,7 @@ Matcher.instDecidableEqOutcome.decEq._proof_1	Matcher.Lang	0	0	false	false
 process_all_fuel_stable._proof_1_17	MatchingEngine.TheoremsFuel	0	0	false	false
 _private.Matcher.LoopEnv.0.Matcher.setOField.match_1.splitter	Matcher.LoopEnv	0	0	false	false
 MatcherRefines.ev_check3._simp_1_52	Matcher.Refines	0	0	false	false
-_private.Matcher.Refines.0.MatcherRefines.capU_ne	Matcher.Refines	317	321	true	true
+_private.Matcher.Refines.0.MatcherRefines.capU_ne	Matcher.Refines	349	353	true	true
 Walk.sideL.eq_1	Walk.Basic	0	0	false	false
 EngineDbApi.Db.mk._flat_ctor	Bridge.EngineDbApi	0	0	false	false
 FIFOLevel_append_newest	MatchingEngine.TheoremsFull	112	121	false	false
@@ -1436,7 +1438,7 @@ Matcher.Eval.ite_inv	Walk.LogicInv	94	112	true	false
 MatcherInner.OCtx.Ok	Matcher.Inner	175	184	false	true
 Walk.State.trades	Walk.Spec	166	166	true	false
 EngineDbAbs.instDecidableEqLevelView.decEq.match_1	Bridge.EngineDbAbs	0	0	false	false
-MatcherRefines.idOnBook_false_iff	Matcher.Refines	751	766	true	true
+MatcherRefines.idOnBook_false_iff	Matcher.Refines	783	798	true	true
 EngineDbAbs.CRequest.orderType	Bridge.EngineDbAbs	77	77	true	true
 MatcherProgram.OT_IOC.eq_1	Matcher.Refines	0	0	false	false
 EngineDbApi.instDecidableEqOrderRow.decEq._proof_3	Bridge.EngineDbApi	0	0	false	false
@@ -1471,7 +1473,7 @@ MatcherSpec.dec_aux2._proof_1_1	Matcher.SpecStep	0	0	true	true
 Matcher.instDecidableEqUnOp._proof_1	Matcher.Lang	0	0	false	false
 MatcherProgram.cancelOrderFun	Matcher.Program	257	263	true	true
 Walk.WHead.rv	Walk.RefineInner	147	147	true	false
-MatcherRefines.Inv.recOn	Matcher.Refines	57	68	false	false
+MatcherRefines.Inv.recOn	Matcher.Refines	86	97	false	false
 Walk.IR.recOn	Walk.EquivMatch	56	60	false	false
 BookState.recOn	MatchingEngine.Book	17	24	false	false
 Walk.sideL.eq_2	Walk.Basic	0	0	false	false
@@ -1486,6 +1488,7 @@ Matcher.evalExpr.eq_1	Matcher.Refines	0	0	false	false
 MatcherInner.inner_cancelOld	Matcher.Inner	460	534	false	true
 EngineDbAbs.instEngineDbAbsStore._proof_12	Bridge.EngineDbAbs	0	0	false	false
 fifoLevelB.match_1	MatchingEngine.Invariants	0	0	false	false
+MatcherRefines.runEntry_fuel_stable	Matcher.Refines	42	69	false	false
 _private.Matcher.Refines.0.Matcher.asBool.match_1.eq_2	Matcher.Refines	0	0	false	false
 Matcher.evalExpr._unsafe_rec	Matcher.Lang	0	0	false	false
 Walk.outerRun._unsafe_rec	Walk.Spec	0	0	false	false
@@ -1544,7 +1547,7 @@ MatcherOuter.OInv.recOn	Matcher.Outer	102	118	false	false
 EngineDbApi.levelFree.pre	Bridge.EngineDbApi	173	175	true	true
 Walk.IR.rec	Walk.EquivMatch	56	60	false	false
 Matcher.instDecidableEqErr	Matcher.Lang	177	177	false	false
-MatcherRefines.findOrderOnBook_none_iff	Matcher.Refines	735	749	true	true
+MatcherRefines.findOrderOnBook_none_iff	Matcher.Refines	767	781	true	true
 EngineDbAbs.CStpMode.cancelNew.sizeOf_spec	Bridge.EngineDbAbs	0	0	false	false
 EngineDbAbs.instDecidableEqCStpMode._proof_1	Bridge.EngineDbAbs	0	0	false	false
 _private.Walk.EquivMatch.0.Walk.innerStep.match_1.eq_2	Walk.EquivMatch	0	0	false	false
@@ -1608,7 +1611,7 @@ MatcherCancel.refines_cancel_resting._proof_1_11	Matcher.Cancel	0	0	true	true
 EngineDbApi.OrderRow.account	Bridge.EngineDbApi	60	60	true	true
 reachable_all_invariants_prefix	MatchingEngine.TheoremsReachable	177	182	false	false
 Walk.hashFind_none_of._simp_1_2	Walk.Equiv	0	0	true	false
-MatcherRefines.dupEnv	Matcher.Refines	622	626	true	true
+MatcherRefines.dupEnv	Matcher.Refines	654	658	true	true
 EngineDbAbs.LevelView.mk	Bridge.EngineDbAbs	387	387	true	true
 processOrder.eq_2	MatchingEngine.TheoremsFuel	0	0	true	true
 EngineDbAbs.CStpMode.casesOn	Bridge.EngineDbAbs	62	69	true	true
@@ -1628,7 +1631,7 @@ _private.Walk.RefineInner.0.Matcher.Stmt.block.match_1.eq_2	Walk.RefineInner	0	0
 EngineDbAbs.instDecidableEqCRequest.decEq	Bridge.EngineDbAbs	81	81	false	false
 Matcher.Outcome.ctorElimType	Matcher.Lang	0	0	false	false
 _private.MatchingEngine.TheoremsFuel.0.doMatch.match_7.splitter	MatchingEngine.TheoremsFuel	0	0	true	true
-MatcherRefines.lookup_process_order	Matcher.Refines	99	102	true	true
+MatcherRefines.lookup_process_order	Matcher.Refines	131	134	true	true
 Walk.w_outer_loop	Walk.RefineOuter	510	523	true	false
 ProcessB.ResultCode.rejectedCapacity	Bridge.ProcessB	54	54	true	true
 instDecidableEqOrder.decEq._proof_4	MatchingEngine.Order	0	0	true	true
@@ -1697,7 +1700,7 @@ MatcherCancel.sum_map_update	Matcher.Cancel	592	609	true	true
 Walk.WF	Walk.EquivEntry	19	29	true	false
 Matcher.Expr.un.injEq	Matcher.Lang	0	0	false	false
 EngineDbAbs.instEngineDbAbsStore._proof_21	Bridge.EngineDbAbs	0	0	false	false
-MatcherRefines.absQueue_ids	Matcher.Refines	456	460	true	true
+MatcherRefines.absQueue_ids	Matcher.Refines	488	492	true	true
 Trade.casesOn	MatchingEngine.Order	35	45	false	false
 Matcher.loopFinish	Matcher.Logic	305	315	true	true
 MatcherCancel.sum_map_update._proof_1_3	Matcher.Cancel	0	0	true	true
@@ -1751,7 +1754,7 @@ EngineDbAbs.absBook_uncrossed.match_1_1	Bridge.EngineDbAbs	0	0	false	false
 MatcherInner.RowView.recOn	Matcher.Inner	82	88	false	false
 MatcherOuter.OInv.tbound	Matcher.Outer	112	112	false	true
 MatcherLoop.Loc.nextp	Matcher.LoopEnv	148	148	true	true
-MatcherRefines.Inv.mk	Matcher.Refines	61	61	true	true
+MatcherRefines.Inv.mk	Matcher.Refines	90	90	true	true
 EngineDbApi.instReprTree.repr.match_1	Bridge.EngineDbApi	0	0	false	false
 TimeInForce._sizeOf_inst	MatchingEngine.Basic	0	0	false	false
 MatcherRun.nO.eq_1	Matcher.Run	0	0	false	false
@@ -1894,7 +1897,7 @@ _private.Matcher.Inner.0.selfTradeConflict.match_1.splitter	Matcher.Inner	0	0	fa
 Matcher.runExt.eq_5	Matcher.Logic	0	0	false	false
 EngineDbApi.Db.count.eq_1	Bridge.EngineDbAbs	0	0	false	false
 ProcessB.instReprReq.repr.match_1	Bridge.ProcessB	0	0	true	true
-MatcherRefines.ev_check3	Matcher.Refines	286	293	true	true
+MatcherRefines.ev_check3	Matcher.Refines	318	325	true	true
 orderCount._sunfold	MatchingEngine.Theorems	0	0	false	false
 _private.Matcher.Accept.0.EngineDbAbs.sideOfTree.match_1.eq_2	Matcher.Accept	0	0	false	false
 Matcher.boundVal.eq_1	Matcher.LoopEnv	0	0	false	false
@@ -2082,7 +2085,7 @@ Matcher.runExt_qRemove	Matcher.Logic	468	473	true	true
 EngineDbApi.EngineDb.capacity	Bridge.EngineDbApi	317	317	true	true
 EngineDbAbs.CStpMode.none	Bridge.EngineDbAbs	64	64	true	true
 MatcherRun.levelView_nL	Matcher.Run	235	236	true	false
-MatcherRefines.eval_dup	Matcher.Refines	631	641	true	true
+MatcherRefines.eval_dup	Matcher.Refines	663	673	true	true
 _private.MatchingEngine.Theorems.0.doMatch.match_1.eq_1	MatchingEngine.Theorems	0	0	false	false
 Matcher.runExt_tFind	Matcher.Logic	464	466	true	true
 Matcher.OField.stpMode	Matcher.Lang	73	73	true	true
@@ -2167,7 +2170,7 @@ _private.Walk.LogicInv.0.Matcher.loopStep.match_3.eq_3	Walk.LogicInv	0	0	true	fa
 Matcher.Val.code.noConfusion	Matcher.Lang	0	0	false	false
 MatcherInner.inner_loop._proof_1_2	Matcher.Inner	0	0	false	true
 Matcher.UnOp.ofNat	Matcher.Lang	0	0	false	false
-MatcherRefines.processB_static	Matcher.Refines	221	257	true	true
+MatcherRefines.processB_static	Matcher.Refines	253	289	true	true
 _private.Bridge.EngineDbAbs.0.EngineDbAbs.bidsSorted_of_pairwise.match_1_1	Bridge.EngineDbAbs	0	0	false	false
 EngineDbAbs.BookView.mk.sizeOf_spec	Bridge.EngineDbAbs	0	0	false	false
 Matcher.instDecidableEqVal.decEq._proof_12	Matcher.Lang	0	0	false	false
@@ -2193,7 +2196,7 @@ Walk.innerStep_fr	Walk.RefineOuter	90	98	true	false
 Matcher.Print.args	Matcher.Print	83	83	false	false
 Matcher.instDecidableEqErr._proof_2	Matcher.Lang	0	0	false	false
 Walk.absSide_ids_perm	Walk.WFInv	61	73	true	false
-MatcherRefines.requestMayRest_iff	Matcher.Refines	556	563	true	true
+MatcherRefines.requestMayRest_iff	Matcher.Refines	588	595	true	true
 EngineDbApi.Db.orders	Bridge.EngineDbApi	80	80	true	true
 EngineDbAbs.betterB.eq_2	Bridge.EngineDbAbs	0	0	false	false
 _private.MatchingEngine.TheoremsFuel.0.doMatch.match_7.congr_eq_1	MatchingEngine.TheoremsFuel	0	0	true	true
@@ -2242,7 +2245,7 @@ Matcher.Eval.ret	Matcher.Logic	243	245	true	true
 PriceLevel.mk.inj	MatchingEngine.Book	0	0	false	false
 EngineDbAbs.COrderType.recOn	Bridge.EngineDbAbs	53	60	false	false
 Order.price	MatchingEngine.Order	20	20	true	true
-_private.Matcher.Refines.0.MatcherRefines.cap_mod	Matcher.Refines	304	307	true	true
+_private.Matcher.Refines.0.MatcherRefines.cap_mod	Matcher.Refines	336	339	true	true
 Matcher.Print.lField.match_1	Matcher.Print	0	0	false	false
 EngineDbApi.Db.WF.hash_nodup	Bridge.EngineDbApi	129	129	true	true
 Matcher.instDecidableEqVal.decEq._proof_25	Matcher.Lang	0	0	false	false
@@ -2346,7 +2349,7 @@ MatcherRefines.ev_capcheck._proof_1_1	Matcher.Refines	0	0	true	true
 Matcher.Err.recOn	Matcher.Lang	174	177	false	false
 MatcherRun.matcherRun._sparseCasesOn_3	Matcher.Run	545	555	false	false
 MatcherProgram.codeOf.match_1	Matcher.Program	0	0	true	true
-MatcherRefines.Inv.casesOn	Matcher.Refines	57	68	false	false
+MatcherRefines.Inv.casesOn	Matcher.Refines	86	97	false	false
 Matcher.evalBin.eq_11	Matcher.Refines	0	0	false	false
 MatcherAccept.side_cont._proof_1_2	Matcher.Accept	0	0	false	true
 Walk.qRemove.eq_1	Walk.EquivEntry	0	0	false	false
@@ -2365,7 +2368,7 @@ MatcherCancel.refines_cancel_resting	Matcher.Cancel	742	1027	true	true
 Walk.outerRun._sunfold	Walk.Spec	0	0	false	false
 Matcher.Ext.orderFree.elim	Matcher.Lang	124	124	false	false
 Matcher.execStmt.match_5	Matcher.Lang	0	0	true	true
-MatcherRefines.tacticMeval	Matcher.Refines	89	93	false	false
+MatcherRefines.tacticMeval	Matcher.Refines	121	125	false	false
 Matcher.Stmt.ret	Matcher.Lang	150	150	true	true
 EngineDbAbs.CRequest.mk.inj	Bridge.EngineDbAbs	0	0	false	false
 Matcher.loopStep	Matcher.Logic	19	32	true	true
@@ -2410,10 +2413,10 @@ EngineDbApi.Db.levelPrice.eq_1	Bridge.EngineDbApiLaws	0	0	false	false
 _private.MatchingEngine.TheoremsFull.0.insertAsc.match_1.eq_2	MatchingEngine.TheoremsFull	0	0	false	false
 selfTradeConflict	MatchingEngine.STP	17	21	true	true
 StopsWF_empty	MatchingEngine.TheoremsFull	1406	1407	false	false
-MatcherRefines.sortLevels_perm	Matcher.Refines	435	449	true	true
+MatcherRefines.sortLevels_perm	Matcher.Refines	467	481	true	true
 MatcherLoop.innerBody	Matcher.LoopEnv	57	62	true	true
 BookInvariant	MatchingEngine.Invariants	142	150	false	false
-MatcherRefines.ev_capcheck	Matcher.Refines	650	660	true	true
+MatcherRefines.ev_capcheck	Matcher.Refines	682	692	true	true
 MatcherAccept.side_cont._proof_1_4	Matcher.Accept	0	0	false	true
 _private.Matcher.Refines.0.Matcher.evalExpr.match_11.eq_6	Matcher.Refines	0	0	false	false
 _private.Walk.EquivMatch.0.Walk.sideL_setHeadRem.match_1.splitter	Walk.EquivMatch	0	0	false	false
@@ -2486,7 +2489,7 @@ MatcherOuter.MCtx.mk.sizeOf_spec	Matcher.Outer	0	0	false	false
 MatcherLoop.«_aux_Matcher_LoopEnv___macroRules_MatcherLoop_tacticLsimp[_]_1»	Matcher.LoopEnv	173	185	false	false
 Matcher.bindResult.match_1	Matcher.Lang	0	0	true	true
 _private.Matcher.Cancel.0.ProcessB.processB.match_5.eq_1	Matcher.Cancel	0	0	false	false
-MatcherRefines.lookup_cancel_order	Matcher.Refines	104	107	true	true
+MatcherRefines.lookup_cancel_order	Matcher.Refines	136	139	true	true
 selfTradeConflict._sparseCasesOn_1	MatchingEngine.STP	17	21	true	true
 MatcherOuter.stopX_of_best._proof_1_3	Matcher.Outer	0	0	true	true
 EngineDbApi.writeLevel_valid	Bridge.EngineDbApiLaws	588	596	false	false
@@ -2626,7 +2629,7 @@ EngineDbAbs.OrderView.side	Bridge.EngineDbAbs	367	367	true	false
 EngineDbAbs.instReprCOrderType.repr	Bridge.EngineDbAbs	60	60	false	false
 MatcherProgram.removeResting	Matcher.Program	98	102	true	true
 _private.MatchingEngine.Theorems.0.canMatchPrice.match_1.eq_2	MatchingEngine.Theorems	0	0	false	false
-MatcherRefines.ev_check2	Matcher.Refines	281	284	true	true
+MatcherRefines.ev_check2	Matcher.Refines	313	316	true	true
 EngineDbAbs.OrderView.noConfusion	Bridge.EngineDbAbs	363	379	true	true
 _private.Matcher.Refines.0.EngineDbAbs.decodeStpMode.match_1.splitter	Matcher.Refines	0	0	true	true
 Matcher.Ext.noConfusionType	Matcher.Lang	0	0	false	false
@@ -2693,7 +2696,7 @@ MatcherInner.HeadFacts.hrow	Matcher.Inner	363	363	false	true
 MatcherCancel.absQueue_congr	Matcher.Cancel	37	43	true	true
 Walk.modAt._sunfold	Walk.Spec	0	0	false	false
 MatcherCancel.side_has_id	Matcher.Cancel	342	354	true	true
-MatcherRefines.staticCode_supported_invalid	Matcher.Refines	213	219	true	true
+MatcherRefines.staticCode_supported_invalid	Matcher.Refines	245	251	true	true
 MatcherInner.Core.rec	Matcher.Inner	549	575	false	false
 _private.MatchingEngine.TheoremsFuel.0.convertStop.match_1.eq_3	MatchingEngine.TheoremsFuel	0	0	false	false
 EngineDbApi.Db.hash	Bridge.EngineDbApi	83	83	true	true
@@ -2724,7 +2727,7 @@ Matcher.execStmt_loop_eq	Matcher.Logic	66	81	true	true
 MatcherStore.Frame.absSide_other	Matcher.StoreStep	110	117	true	true
 EngineDbAbs.absQueue_fifo.match_1_1	Bridge.EngineDbAbs	0	0	false	false
 _private.Matcher.Logic.0.Matcher.execStmt.match_16.splitter	Matcher.Logic	0	0	false	false
-MatcherRefines.Inv.count_le	Matcher.Refines	68	68	true	true
+MatcherRefines.Inv.count_le	Matcher.Refines	97	97	true	true
 Order.mk._flat_ctor	MatchingEngine.Order	0	0	false	false
 ProcessB.Req.order.elim	Bridge.ProcessB	44	44	false	false
 Walk.nodup_map_of_inj.match_1_1	Walk.WFInv	0	0	true	false
@@ -2735,6 +2738,7 @@ MatcherSpec.AtHead	Matcher.SpecStep	216	223	true	true
 _private.Matcher.LoopEnv.0.Matcher.setOField.match_1.eq_8	Matcher.LoopEnv	0	0	false	false
 _private.Bridge.EngineDbAbs.0.EngineDbAbs.COrderType.tif.match_1.eq_2	Bridge.EngineDbAbs	0	0	false	false
 ProcessB.TradeObs.mk	Bridge.ProcessB	113	113	true	true
+_private.Matcher.Refines.0.Matcher.instReprOutcome.repr.match_1.eq_1	Matcher.Refines	0	0	false	false
 ProcessB.ResultCode.cancelled.sizeOf_spec	Bridge.ProcessB	0	0	false	false
 _private.Matcher.Run.0.Except.map.match_1.eq_1	Matcher.Run	0	0	false	false
 insertAsc.eq_2	MatchingEngine.TheoremsFull	0	0	false	false
@@ -2857,7 +2861,7 @@ Walk.State.mk	Walk.Spec	162	162	true	false
 MatcherInner.inner_fill._proof_1_7	Matcher.Inner	0	0	false	true
 MatcherCancel.cancelEnv3.eq_1	Matcher.Cancel	0	0	false	false
 MatcherProgram.STP_CANCEL_OLD.eq_1	Matcher.Refines	0	0	false	false
-MatcherRefines.Eval.when_fire	Matcher.Refines	347	350	true	true
+MatcherRefines.Eval.when_fire	Matcher.Refines	379	382	true	true
 Matcher.instReprOutcome.repr.match_1	Matcher.Lang	0	0	true	true
 MatcherInner.IInv.spec	Matcher.Inner	202	202	false	true
 _private.Matcher.Accept.0.EngineDbAbs.CRequest.toSpec.match_1.splitter	Matcher.Accept	0	0	true	true
@@ -2990,7 +2994,7 @@ _private.Matcher.Run.0.MatcherRun.matcherRun.match_3.splitter	Matcher.Run	0	0	fa
 instReprBookState.repr	MatchingEngine.Book	24	24	false	false
 _private.Walk.EquivEntry.0.cancelOrder.match_3.eq_2	Walk.EquivEntry	0	0	false	false
 Matcher.Outcome.normal	Matcher.Lang	180	180	true	true
-MatcherRefines.Inv.count_eq	Matcher.Refines	66	66	true	true
+MatcherRefines.Inv.count_eq	Matcher.Refines	95	95	true	true
 Walk.contraCount.eq_1	Walk.Basic	0	0	false	false
 MatcherProgram.c.eq_1	Matcher.Refines	0	0	false	false
 EngineDbAbs.CRequest.mkOrder	Bridge.EngineDbAbs	144	152	true	true
@@ -3033,7 +3037,7 @@ ProcessB.ResultCode.rec	Bridge.ProcessB	48	57	true	true
 ProcessB.ResultCode.rejectedCapacity.sizeOf_spec	Bridge.ProcessB	0	0	false	false
 MatcherProgram.OT_LIMIT	Matcher.Program	41	41	true	true
 EngineDbApi.EngineDb.hashRemove_law	Bridge.EngineDbApi	369	369	true	true
-MatcherRefines.ev_check5	Matcher.Refines	299	302	true	true
+MatcherRefines.ev_check5	Matcher.Refines	331	334	true	true
 _private.Matcher.Logic.0.Matcher.liveOrder.match_1.eq_2	Matcher.Logic	0	0	false	false
 Matcher.Stmt.block	Matcher.Lang	153	156	true	true
 MatcherSpec.mrOf	Matcher.SpecStep	383	385	true	true
@@ -3065,7 +3069,7 @@ Walk.ids_cons	Walk.EquivMatch	339	340	true	false
 _private.Matcher.Run.0.MatcherRun.matcherRun.match_1.eq_1	Matcher.Run	0	0	false	false
 Matcher.instDecidableEqVal.decEq._proof_26	Matcher.Lang	0	0	false	false
 MatcherRest.insLevel_map.match_1_1	Matcher.Rest	0	0	true	true
-MatcherRefines.Inv	Matcher.Refines	57	68	true	true
+MatcherRefines.Inv	Matcher.Refines	86	97	true	true
 _private.MatchingEngine.Theorems.0.totalRemaining_foldl_acc._proof_1_4	MatchingEngine.Theorems	0	0	true	true
 match_dispose_BookOk	MatchingEngine.TheoremsFull	987	1029	false	false
 _private.Walk.LogicInv.0.Matcher.loopStep.match_1.eq_2	Walk.LogicInv	0	0	false	false
@@ -3157,7 +3161,7 @@ Matcher.Print.decl	Matcher.Print	157	157	false	false
 Matcher.LoopRun.below.casesOn	Matcher.Logic	0	0	false	false
 EngineDbApi.Db.WF.orders_live	Bridge.EngineDbApi	136	136	true	true
 ProcessB.Req.order.sizeOf_spec	Bridge.ProcessB	0	0	false	false
-MatcherRefines.ev_check6	Matcher.Refines	334	341	true	true
+MatcherRefines.ev_check6	Matcher.Refines	366	373	true	true
 MatchResult.incoming	MatchingEngine.Match	22	22	true	true
 OrderStatus.cancelled.elim	MatchingEngine.Basic	40	40	false	false
 _private.Matcher.Refines.0.Matcher.evalExpr.match_7.eq_1	Matcher.Refines	0	0	false	false
@@ -3234,7 +3238,7 @@ EngineDbAbs.insLevel.eq_def	Bridge.EngineDbAbs	0	0	true	true
 _private.Walk.RefineOuter.0.Walk.innerStep.match_3.eq_2	Walk.RefineOuter	0	0	false	false
 _private.Matcher.Logic.0.Matcher.exec_call.match_3.eq_1	Matcher.Logic	0	0	false	false
 _private.MatchingEngine.TheoremsFuel.0.convertStop.match_1.eq_2	MatchingEngine.TheoremsFuel	0	0	false	false
-MatcherRefines.CapOk	Matcher.Refines	54	55	true	true
+MatcherRefines.CapOk	Matcher.Refines	83	84	true	true
 Matcher.Err.type	Matcher.Lang	175	175	true	true
 sellMatchStable	MatchingEngine.Theorems	1815	1819	false	false
 MatcherStore.InvM	Matcher.StoreStep	391	399	true	true
@@ -3286,7 +3290,7 @@ MatcherRun.nO_disp	Matcher.Run	55	55	false	false
 Matcher.runExt_tBest	Matcher.Logic	461	462	true	true
 ProcessB.idOnBook	Bridge.ProcessB	74	75	true	true
 MatcherLoop.innerCond.eq_1	Matcher.LoopEnv	0	0	false	false
-MatcherRefines.refines_of_reject	Matcher.Refines	666	674	true	true
+MatcherRefines.refines_of_reject	Matcher.Refines	698	706	true	true
 _private.Bridge.EngineDbAbs.0.EngineDbAbs.decodeSide.match_1.eq_2	Bridge.EngineDbAbs	0	0	false	false
 Walk.sideL_setSideL	Walk.Basic	24	25	true	false
 EngineDbAbs.CRequest.noConfusion	Bridge.EngineDbAbs	71	81	false	false
@@ -3386,7 +3390,7 @@ _private.Bridge.EngineDbAbs.0.EngineDbAbs.decodeStpMode.match_1.eq_1	Bridge.Engi
 _private.Matcher.Logic.0.Matcher.loopStep.match_6.eq_2	Matcher.Logic	0	0	true	true
 MatcherAccept.SpecOrd.policy	Matcher.Accept	40	40	true	true
 Matcher.Bound.lit	Matcher.Lang	117	117	true	true
-MatcherRefines._aux_Matcher_Refines___macroRules_MatcherRefines_tacticMeval_1	Matcher.Refines	89	93	false	false
+MatcherRefines._aux_Matcher_Refines___macroRules_MatcherRefines_tacticMeval_1	Matcher.Refines	121	125	false	false
 Matcher.LField.ofNat	Matcher.Lang	0	0	false	false
 Walk.innerRun_stop.match_1_1	Walk.RefineOuter	0	0	true	false
 MatcherSpec.rest_empty	Matcher.SpecStep	186	191	true	true
@@ -3411,11 +3415,11 @@ EngineDbApi.first_stable_under_insertTail	Bridge.EngineDbApiLaws	115	122	false	f
 MatcherInner.inner_body	Matcher.Inner	908	924	false	true
 EngineDbAbs.instEngineDbAbsStore._proof_17	Bridge.EngineDbAbs	0	0	false	false
 EngineDbApi.OrderRow.rec	Bridge.EngineDbApi	57	66	false	false
-MatcherRefines.absQueue_length	Matcher.Refines	451	454	true	true
+MatcherRefines.absQueue_length	Matcher.Refines	483	486	true	true
 _private.MatchingEngine.Theorems.0.insertAsc_head_gt_bound	MatchingEngine.Theorems	882	910	false	false
 instInhabitedPriceLevel	MatchingEngine.Book	14	14	false	false
 Walk.levelsUsed.eq_1	Walk.Refine	0	0	false	false
-MatcherRefines.ev_check1	Matcher.Refines	274	279	true	true
+MatcherRefines.ev_check1	Matcher.Refines	306	311	true	true
 Walk.w_side_run	Walk.Refine	301	386	true	false
 OrderType.ctorIdx	MatchingEngine.Basic	0	0	true	true
 stopW_cons	MatchingEngine.TheoremsFuel	123	125	false	false
@@ -3444,6 +3448,7 @@ process_all_fuel_stable._proof_1_1	MatchingEngine.TheoremsFuel	0	0	false	false
 _private.MatchingEngine.TheoremsFuel.0.doMatch.match_9.congr_eq_2	MatchingEngine.TheoremsFuel	0	0	true	true
 EngineDbAbs.instDecidableEqLevelView.decEq._proof_3	Bridge.EngineDbAbs	0	0	false	false
 TimeInForce.ioc.elim	MatchingEngine.Basic	31	31	false	false
+_private.Matcher.Refines.0.Matcher.instReprOutcome.repr.match_1.eq_2	Matcher.Refines	0	0	false	false
 Matcher.execStmt.eq_10	Matcher.Logic	0	0	false	false
 Matcher.Val.u64.sizeOf_spec	Matcher.Lang	0	0	false	false
 _private.Matcher.Logic.0.Matcher.execStmt.match_14.eq_1	Matcher.Logic	0	0	false	false
@@ -3479,7 +3484,7 @@ EngineDbApi.qInsertTail_preserves_WF._simp_1_1	Bridge.EngineDbApiLaws	0	0	true	t
 STPPolicy.toCtorIdx	MatchingEngine.Basic	0	0	false	false
 Matcher.instReprProgram	Matcher.Lang	172	172	false	false
 _private.Walk.Equiv.0.wouldCross.match_1.eq_2	Walk.Equiv	0	0	false	false
-MatcherRefines.idOnBook_absBook	Matcher.Refines	484	518	true	true
+MatcherRefines.idOnBook_absBook	Matcher.Refines	516	550	true	true
 MatcherOuter.oc.eq_1	Matcher.Outer	0	0	false	false
 MatcherRun.nL_mk	Matcher.Run	46	47	false	false
 insertOrder_sell_preserves_bids	MatchingEngine.Theorems	244	251	false	false
@@ -3488,7 +3493,7 @@ Walk.OW.mk._flat_ctor	Walk.EquivMatch	0	0	false	false
 ProcessB.Req.noConfusion	Bridge.ProcessB	42	46	false	false
 EngineDbAbs.OrderRow.dflt	Bridge.EngineDbAbs	307	309	true	true
 Walk.allBookOrders_sides	Walk.EquivEntry	60	61	true	false
-_private.Matcher.Refines.0.MatcherRefines.capU_toNat	Matcher.Refines	309	315	true	true
+_private.Matcher.Refines.0.MatcherRefines.capU_toNat	Matcher.Refines	341	347	true	true
 MatcherInner.HeadFacts.hh	Matcher.Inner	377	377	false	true
 _private.MatchingEngine.TheoremsElegant.0.List.getLast?.match_1.eq_2	MatchingEngine.TheoremsElegant	0	0	false	false
 processCascade.eq_def	MatchingEngine.Theorems	0	0	false	false
@@ -3508,7 +3513,7 @@ _private.Matcher.Refines.0.Matcher.instReprTy.repr.match_1.eq_3	Matcher.Refines	
 instBEqPriceLevel	MatchingEngine.Book	14	14	false	false
 EngineDbApi.Db.levelPrice	Bridge.EngineDbApi	109	111	true	true
 MatcherRun.nP.eq_1	Matcher.Run	0	0	false	false
-MatcherRefines.specStep	Matcher.Refines	70	72	true	true
+MatcherRefines.specStep	Matcher.Refines	99	101	true	true
 _private.MatchingEngine.TheoremsFuel.0.processCascade.match_1.eq_1	MatchingEngine.TheoremsFuel	0	0	false	false
 PriceLevel.mk.injEq	MatchingEngine.Book	0	0	true	false
 _private.Matcher.Logic.0.Matcher.execStmt_loop_eq.match_3.eq_2	Matcher.Logic	0	0	false	false
@@ -3630,7 +3635,7 @@ MatcherStore.Frame.absLevel_eq	Matcher.StoreStep	97	99	true	true
 _private.MatchingEngine.TheoremsFuel.0.processOrder.match_1.eq_1	MatchingEngine.TheoremsFuel	0	0	false	false
 EngineDbApi.instDecidableEqOrderRow.decEq._proof_1	Bridge.EngineDbApi	0	0	false	false
 TimeInForce._sizeOf_1	MatchingEngine.Basic	0	0	false	false
-MatcherRefines.Inv.rec	Matcher.Refines	57	68	false	false
+MatcherRefines.Inv.rec	Matcher.Refines	86	97	false	false
 MatcherInner.dropDb_setRem	Matcher.Inner	540	547	true	true
 ProcessB.Req.cancel.injEq	Bridge.ProcessB	0	0	false	false
 MatcherOuter.outer_run._proof_1_1	Matcher.Outer	0	0	false	true
@@ -3667,7 +3672,7 @@ ProcessB.TradeObs._sizeOf_inst	Bridge.ProcessB	0	0	false	false
 MatcherAccept.Static.mk	Matcher.Accept	158	158	true	true
 Matcher.instReprVal.repr	Matcher.Lang	55	55	false	false
 MatcherRefines.argsOf	Matcher.Refines	37	40	true	true
-MatcherRefines.ev_dupcheck	Matcher.Refines	643	648	true	true
+MatcherRefines.ev_dupcheck	Matcher.Refines	675	680	true	true
 Matcher.loopStep.eq_2	Matcher.Logic	0	0	false	false
 ProcessB.ResultCode.recOn	Bridge.ProcessB	48	57	false	false
 Matcher.St._sizeOf_inst	Matcher.Lang	0	0	false	false
@@ -3776,7 +3781,7 @@ EngineDbApi.Tree.bids.sizeOf_spec	Bridge.EngineDbApi	0	0	false	false
 MatcherRest.joinDb.eq_1	Matcher.Rest	0	0	false	false
 ownLevels.eq_2	MatchingEngine.TheoremsFull	0	0	false	false
 Walk.OW.casesOn	Walk.EquivMatch	525	540	false	false
-MatcherRefines.findSome_side_none	Matcher.Refines	719	733	true	true
+MatcherRefines.findSome_side_none	Matcher.Refines	751	765	true	true
 Matcher.instDecidableEqOField._proof_1	Matcher.Lang	0	0	true	true
 Matcher.Err.tradeBuffer.sizeOf_spec	Matcher.Lang	0	0	false	false
 _private.Walk.EquivEntry.0.Walk.cancel.match_1.eq_1	Walk.EquivEntry	0	0	false	false
@@ -3812,12 +3817,12 @@ EngineDbApi.OrderRow.side	Bridge.EngineDbApi	61	61	true	true
 Matcher.priceFreshB	Matcher.Lang	254	255	true	true
 _private.Matcher.Refines.0.ProcessB.processB.match_1.eq_1	Matcher.Refines	0	0	false	false
 Matcher.subU.eq_1	Matcher.LoopEnv	0	0	false	false
-MatcherRefines.refines_cancel_unknown	Matcher.Refines	804	821	true	true
+MatcherRefines.refines_cancel_unknown	Matcher.Refines	836	853	true	true
 Matcher.evalExpr.eq_11	Matcher.Refines	0	0	false	false
 Matcher.Outcome.ret.inj	Matcher.Lang	0	0	false	false
 Matcher.Ext.setO.noConfusion	Matcher.Lang	0	0	false	false
 MatcherStore.Frame.tree	Matcher.StoreStep	83	83	true	true
-MatcherRefines.staticCode	Matcher.Refines	135	146	true	true
+MatcherRefines.staticCode	Matcher.Refines	167	178	true	true
 _private.MatchingEngine.Theorems.0.partition_snd_subset	MatchingEngine.Theorems	3609	3613	false	false
 MatcherProgram.SIDE_BUY.eq_1	Matcher.Refines	0	0	false	false
 MatcherStore.free_tree_length	Matcher.StoreStep	353	359	true	true
@@ -4076,7 +4081,7 @@ process_preserves_AllInv	MatchingEngine.Theorems	3969	3978	false	false
 Matcher.instReprProgram.repr	Matcher.Lang	172	172	false	false
 EngineDbAbs.sortLevels_pairwise	Bridge.EngineDbAbs	524	531	true	true
 process_emits_safe_trades	MatchingEngine.TheoremsFull	1377	1380	false	false
-MatcherRefines.refines_duplicate	Matcher.Refines	681	693	true	true
+MatcherRefines.refines_duplicate	Matcher.Refines	713	725	true	true
 Walk.Agree.obs	Walk.EquivEntry	104	106	false	false
 Matcher.Ext.qInsertTail	Matcher.Lang	128	128	true	true
 EngineDbAbs.instDecidableEqOrderView	Bridge.EngineDbAbs	379	379	false	false
@@ -4224,7 +4229,7 @@ MatcherLoop.set_best	Matcher.LoopEnv	195	197	true	true
 MatcherSpec.doMatch_fuel_stable	Matcher.SpecStep	67	99	true	true
 EngineDbApi.EngineDb.levelsUsed_tRemove	Bridge.EngineDbApi	412	412	true	true
 BookUncrossed_with_clock	MatchingEngine.Theorems	194	197	false	false
-MatcherRefines.decodeOrderType_market_iff	Matcher.Refines	168	172	true	true
+MatcherRefines.decodeOrderType_market_iff	Matcher.Refines	200	204	true	true
 Matcher.boundVal.eq_2	Matcher.LoopEnv	0	0	false	false
 Matcher.evalExpr.match_3	Matcher.Lang	0	0	true	true
 Matcher.Err.noReturn.elim	Matcher.Lang	176	176	false	false
@@ -4247,7 +4252,7 @@ Walk.sideL_insertOrder	Walk.Equiv	120	128	true	false
 _private.Matcher.Refines.0.EngineDbAbs.decodeStpMode.match_1.eq_5	Matcher.Refines	0	0	false	false
 _private.Matcher.Logic.0.Matcher.loopStep.match_6.splitter	Matcher.Logic	0	0	true	true
 EngineDbApi.EngineDb.count_tInsert	Bridge.EngineDbApi	397	397	true	true
-MatcherRefines.qmax_toNat	Matcher.Refines	329	332	true	true
+MatcherRefines.qmax_toNat	Matcher.Refines	361	364	true	true
 TimeInForce.fok.elim	MatchingEngine.Basic	32	32	false	false
 runAllTests	MatchingEngine.Tests	352	371	false	false
 EngineDbApi.tInsert.post	Bridge.EngineDbApi	291	292	true	true
@@ -4283,7 +4288,7 @@ MatcherLoop.Loc.lvl	Matcher.LoopEnv	153	153	true	true
 Matcher.Stmt.seq.inj	Matcher.Lang	0	0	false	false
 MatcherInner.OCtx.mk.injEq	Matcher.Inner	0	0	false	false
 _private.MatchingEngine.Theorems.0.totalRemaining_foldl_acc	MatchingEngine.Theorems	3284	3309	true	true
-MatcherRefines.refines_static	Matcher.Refines	676	679	true	true
+MatcherRefines.refines_static	Matcher.Refines	708	711	true	true
 Walk.State.mk.injEq	Walk.Spec	0	0	false	false
 Walk.State.noConfusionType	Walk.Spec	0	0	false	false
 EngineDbAbs.CRequest.account	Bridge.EngineDbAbs	75	75	true	true
@@ -4338,7 +4343,7 @@ EngineDbAbs.mem_insLevel._simp_1_4	Bridge.EngineDbAbs	0	0	true	true
 EngineDbAbs.CStpMode.ofNat	Bridge.EngineDbAbs	0	0	false	false
 stpGuaranteeB.match_1	MatchingEngine.Invariants	0	0	false	false
 Matcher.Err.invalidHandle	Matcher.Lang	175	175	true	true
-MatcherRefines.Eval.retcode	Matcher.Refines	271	272	true	true
+MatcherRefines.Eval.retcode	Matcher.Refines	303	304	true	true
 Walk.WR	Walk.RefineInner	38	50	true	false
 Matcher.loopFinish.eq_1	Matcher.Logic	0	0	false	false
 Walk.modHead.match_1	Walk.Spec	0	0	true	false
@@ -4384,7 +4389,7 @@ _private.Matcher.Accept.0.EngineDbAbs.CRequest.toSpec.match_1.eq_1	Matcher.Accep
 MatcherRefines.argsOf.eq_2	Matcher.Refines	0	0	false	false
 insertDesc.eq_2	MatchingEngine.TheoremsFull	0	0	false	false
 Matcher.Stmt.emit.elim	Matcher.Lang	148	149	false	false
-MatcherRefines.processB_after_static	Matcher.Refines	565	616	true	true
+MatcherRefines.processB_after_static	Matcher.Refines	597	648	true	true
 Matcher.getOField.eq_3	Matcher.Cancel	0	0	false	false
 mkLimit	MatchingEngine.Tests	18	23	false	false
 insertOrder_sell_preserves_uncrossed	MatchingEngine.Theorems	340	396	false	false
@@ -4539,7 +4544,7 @@ ProcessB.instDecidableEqTradeObs.decEq._proof_2	Bridge.ProcessB	0	0	false	false
 MatcherCancel.cancel_side_view._simp_1_5	Matcher.Cancel	0	0	true	true
 MatcherRest.appAt	Matcher.Rest	53	55	true	true
 MatcherStore.prioB_of_better	Matcher.StoreStep	34	38	true	true
-MatcherRefines.Inv.levels_eq	Matcher.Refines	67	67	true	true
+MatcherRefines.Inv.levels_eq	Matcher.Refines	96	96	true	true
 OrderType.market	MatchingEngine.Basic	23	23	true	true
 Matcher.Expr.var.sizeOf_spec	Matcher.Lang	0	0	false	false
 Walk.WR.passive	Walk.RefineInner	50	50	true	false
@@ -4549,7 +4554,7 @@ process_all_fuel_stable._proof_1_13	MatchingEngine.TheoremsFuel	0	0	false	false
 Walk.w_side_cont	Walk.Refine	146	299	true	false
 Matcher.Ext.tBest.sizeOf_spec	Matcher.Lang	0	0	false	false
 Walk.innerTest	Walk.Spec	179	181	true	false
-MatcherRefines.ev_check4	Matcher.Refines	295	297	true	true
+MatcherRefines.ev_check4	Matcher.Refines	327	329	true	true
 Matcher.Err.fuel.elim	Matcher.Lang	176	176	false	false
 totalRemaining_drop_head_order._proof_1_1	MatchingEngine.Theorems	0	0	true	true
 Matcher.instDecidableEqVal.decEq._proof_30	Matcher.Lang	0	0	false	false
@@ -4576,7 +4581,7 @@ Walk.tRemove.eq_1	Walk.EquivEntry	0	0	false	false
 availableQty	MatchingEngine.Process	59	64	true	true
 _private.MatchingEngine.Theorems.0.doMatch.match_5.splitter	MatchingEngine.Theorems	0	0	false	false
 MatcherLoop.Loc.mk._flat_ctor	Matcher.LoopEnv	0	0	false	false
-MatcherRefines.Inv.levels_resting	Matcher.Refines	65	65	true	true
+MatcherRefines.Inv.levels_resting	Matcher.Refines	94	94	true	true
 MatcherRefines.ev_check6._simp_1_41	Matcher.Refines	0	0	true	true
 MatcherStore.drop_restingCount._proof_1_4	Matcher.StoreStep	0	0	true	true
 MatcherRun.nL_nL	Matcher.Run	39	40	false	false
@@ -4621,7 +4626,7 @@ EngineDbApi.EngineDb.count	Bridge.EngineDbApi	342	342	true	true
 EngineDbAbs.instDecidableEqCRequest.decEq._proof_4	Bridge.EngineDbAbs	0	0	false	false
 MatcherInner.Core.fle	Matcher.Inner	553	553	false	true
 _private.Matcher.Refines.0.Matcher.instReprVal.repr.match_1.eq_5	Matcher.Refines	0	0	false	false
-MatcherRefines.ev_qmax	Matcher.Refines	323	327	true	true
+MatcherRefines.ev_qmax	Matcher.Refines	355	359	true	true
 EngineDbApi.tBest.post.eq_2	Bridge.EngineDbApiLaws	0	0	false	false
 MatcherLoop.outerCond.eq_1	Matcher.LoopEnv	0	0	false	false
 MatcherOuter.MCtx.isBuy	Matcher.Outer	88	88	false	true
@@ -4665,7 +4670,7 @@ MatcherLoop.ev_ext	Matcher.LoopEnv	228	234	true	true
 MatcherSpec.rest_step._proof_1_1	Matcher.SpecStep	0	0	true	true
 process_PostOnlyGuarantee	MatchingEngine.TheoremsFull	1382	1385	false	false
 EngineDbApi.EngineDb.levelsUsed_tInsert	Bridge.EngineDbApi	411	411	true	true
-MatcherRefines.orderSt	Matcher.Refines	48	48	true	true
+MatcherRefines.orderSt	Matcher.Refines	77	77	true	true
 _private.Matcher.Accept.0.Matcher.instReprTy.repr.match_1.eq_4	Matcher.Accept	0	0	false	false
 _private.Matcher.Refines.0.Matcher.evalExpr.match_9.splitter	Matcher.Refines	0	0	false	false
 Walk.Ctx.own	Walk.Spec	150	150	true	false
@@ -4736,7 +4741,7 @@ MatcherLoop.Loc.noConfusionType	Matcher.LoopEnv	0	0	false	false
 EngineDbAbs.mem_sortLevels._simp_1_4	Bridge.EngineDbAbs	0	0	true	true
 _private.Matcher.Logic.0.Matcher.runExt.match_5.eq_1	Matcher.Logic	0	0	false	false
 _private.Bridge.EngineDbAbs.0.EngineDbAbs.CRequest.toSpec.match_1.splitter	Bridge.EngineDbAbs	0	0	true	false
-MatcherRefines.cancelEnv	Matcher.Refines	779	781	true	true
+MatcherRefines.cancelEnv	Matcher.Refines	811	813	true	true
 EngineDbApi.nextIn	Bridge.EngineDbApi	264	268	true	true
 stopW_pos._proof_1_1	MatchingEngine.TheoremsFuel	0	0	false	false
 MatcherRun.matcherRun._unsafe_rec	Matcher.Run	0	0	false	false
@@ -4744,7 +4749,7 @@ test_stopCascade	MatchingEngine.Tests	270	279	false	false
 EngineDbAbs.LevelView.ctorIdx	Bridge.EngineDbAbs	0	0	false	false
 MatcherAccept.SpecOrd.mk	Matcher.Accept	26	26	true	true
 Matcher.runExt.eq_10	Matcher.Logic	0	0	false	false
-MatcherRefines.cancelOrder_none_iff	Matcher.Refines	768	777	true	true
+MatcherRefines.cancelOrder_none_iff	Matcher.Refines	800	809	true	true
 MatcherRun.views_iff	Matcher.Run	238	246	true	false
 EngineDbAbs.instDecidableEqCRequest.decEq._proof_1	Bridge.EngineDbAbs	0	0	false	false
 Matcher.loopStep._sparseCasesOn_6	Matcher.Logic	19	32	true	true
@@ -4762,7 +4767,7 @@ Walk.ids_sub_of_head	Walk.EquivMatch	545	548	true	false
 MatcherRun.bookView_iff	Matcher.Run	258	259	true	false
 MatcherOuter.canMatch_iff	Matcher.Outer	143	151	false	true
 EngineDbApi.orderFree_preserves_WF	Bridge.EngineDbApiLaws	226	243	true	true
-MatcherRefines.eval_cancel_find	Matcher.Refines	795	802	true	true
+MatcherRefines.eval_cancel_find	Matcher.Refines	827	834	true	true
 ProcessB.instDecidableEqTradeObs.decEq._proof_3	Bridge.ProcessB	0	0	false	false
 Matcher.St.mk.injEq	Matcher.Lang	0	0	false	false
 Matcher.lookupFun.match_1	Matcher.Lang	0	0	true	true
@@ -4831,7 +4836,7 @@ Matcher.divU.eq_1	Matcher.Refines	0	0	false	false
 Walk.qFirst.eq_1	Walk.Basic	0	0	true	false
 EngineDbApi.tFind.post	Bridge.EngineDbApi	280	284	true	true
 Walk.WF_of_Inv._proof_1_1	Walk.WFInv	0	0	true	false
-MatcherRefines.toSpec_none_of_supported	Matcher.Refines	174	211	true	true
+MatcherRefines.toSpec_none_of_supported	Matcher.Refines	206	243	true	true
 _private.Matcher.Logic.0.Matcher.execStmt.match_7.eq_2	Matcher.Logic	0	0	false	false
 process_all_fuel_stable._proof_1_21	MatchingEngine.TheoremsFuel	0	0	false	false
 _private.MatchingEngine.Theorems.0.doMatch_passive_price_sell_acc	MatchingEngine.Theorems	3172	3244	false	false
@@ -4884,7 +4889,7 @@ Matcher.Outcome._sizeOf_inst	Matcher.Lang	0	0	false	false
 test_bug3_mtlMinQty	MatchingEngine.Tests	321	350	false	false
 _private.Matcher.Logic.0.Matcher.asU64.match_1.splitter	Matcher.Logic	0	0	false	false
 fokCheck	MatchingEngine.Process	66	68	true	true
-MatcherRefines.cancel_run	Matcher.Refines	783	793	true	true
+MatcherRefines.cancel_run	Matcher.Refines	815	825	true	true
 OrderType.stopLimit.elim	MatchingEngine.Basic	25	25	false	false
 EngineDbAbs.instEngineDbAbsStore._proof_43	Bridge.EngineDbAbs	0	0	false	false
 EngineDbAbs.LevelView.mk.sizeOf_spec	Bridge.EngineDbAbs	0	0	false	false
@@ -4973,7 +4978,7 @@ _private.MatchingEngine.TheoremsFull.0.doMatch.match_7.splitter	MatchingEngine.T
 Matcher.FunDef.mk.injEq	Matcher.Lang	0	0	false	false
 orderSum.eq_1	Matcher.SpecStep	0	0	false	false
 MatcherStore.drop_restingCount	Matcher.StoreStep	253	280	true	true
-MatcherRefines.orderEnv	Matcher.Refines	42	46	true	true
+MatcherRefines.orderEnv	Matcher.Refines	71	75	true	true
 Matcher.instDecidableEqVal.decEq._proof_3	Matcher.Lang	0	0	false	false
 MatcherLoop.Loc.mk.inj	Matcher.LoopEnv	0	0	false	false
 Matcher.Eval.seq_ret	Matcher.Logic	222	226	true	true
@@ -5220,7 +5225,7 @@ MatcherOuter.OInv.hashid	Matcher.Outer	114	114	false	true
 MatcherSpec.asksOf.eq_1	Matcher.SpecStep	0	0	false	false
 MatcherProgram.STP_DECREMENT.eq_1	Matcher.Refines	0	0	false	false
 MatcherLoop.ev_crossCond	Matcher.LoopEnv	495	505	true	true
-MatcherRefines.Inv.client	Matcher.Refines	63	63	true	true
+MatcherRefines.Inv.client	Matcher.Refines	92	92	true	true
 _private.Matcher.Logic.0.Matcher.execStmt.match_5.eq_1	Matcher.Logic	0	0	false	false
 EngineDbAbs.instDecidableEqOrderView.decEq._proof_10	Bridge.EngineDbAbs	0	0	false	false
 Matcher.execStmt_succ	Matcher.Logic	109	187	true	true
