@@ -195,7 +195,12 @@ About 4,500 new lines in seven files, 213 theorems. The invariant as proved is i
 **Decisions from the checkpoint review, applied**
 - The rest of the run is stated at the spec's own fuel (`rest σ := dm (matchMeasure σ + 1) σ`), with a new fuel-stability lemma (`doMatch_fuel_stable`). The repository had no `doMatch` monotonicity lemma to reuse.
 - No result code distinguishes a filled incoming order from one cancelled by STP (every accepted order returns `accepted`, and `dispose` treats both alike). So the cancelled flag is folded into `rem = 0` (clause `aggr`).
-- `Program.lean` is unchanged (`c/gen/matcher.c` byte-identical, `gen_matcher.sh --check`). `Inv` holds at outer boundaries; `InvM s l` holds inside an outer iteration.
+- Between `14e7477` and `40e3816`, `Program.lean` was source-refactored to extract
+  `processOrderStmts` and `cancelOrderStmts`; the represented program did not
+  change at the printer boundary.  Evidence: `git diff 14e7477 40e3816 --
+  c/gen/matcher.c` is empty, while the corresponding `Program.lean` diff is the
+  statement-list extraction.  `gen_matcher.sh --check` passes at `40e3816`.
+  `Inv` holds at outer boundaries; `InvM s l` holds inside an outer iteration.
 - No branch of the inner body failed to map to a `doMatch` unfolding, so there is no ⚑ item.
 
 **Pre-proof items from the checkpoint review**
@@ -221,7 +226,10 @@ About 4,500 new lines in seven files, 213 theorems. The invariant as proved is i
 | `docs/plan-v2/FRAGMENT.md`, `PLAN.md` | Read purity; decisions for the matching loop. |
 | `scripts/matcher_c_capacity.sh` | POST_ONLY case separated, seeds end at the first state divergence, mean calls compared reported. |
 
-**`sorry` count:** 0 in this phase's deliverables. Project: 2, unchanged, both in `lean/Bridge/ForwardSimulation.lean`, which `matcher_refines` supersedes.
+**Historical `sorry` count at the Phase 4 checkpoint:** 0 in this phase's
+deliverables; the project then still had 2, both in
+`lean/Bridge/ForwardSimulation.lean`.  Those two declarations were retired in
+`82eb6ba`; the current project has 0 `sorry` declarations.
 
 **Tests**
 - `lake build`: clean (102 jobs).
