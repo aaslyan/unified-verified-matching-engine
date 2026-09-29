@@ -1,151 +1,144 @@
-# Walk-spec STATUS — Phase A3a (WF from Inv; the inner loop refines the walk)
+# Walk-spec STATUS — Phase A3b (outer loop, side function, `Walk.refines`, `matcher_refines`)
 
-Commit: see `git log -1 -- docs/walk-spec/STATUS-W.md`   Branch: walk-spec   lake build: clean (113 jobs, no warnings in `lean/Walk/`), before and after   sorry count under lean/Walk: 0
+Commit: see `git log -1 -- docs/walk-spec/STATUS-W.md`   Branch: walk-spec   lake build: clean (115 jobs, no warnings in `lean/Walk/`), before and after   sorry count under lean/Walk: 0
 
-A0, A1 and A2 records: `A0-INVENTORY.md`, `A2-STATUS.md`; the A1 status is in git history at `d9e83c8`.
+Earlier records: `A0-INVENTORY.md`, `A2-STATUS.md`, `A3a-STATUS.md`; the A1 status is in git history at `d9e83c8`.
 
 **Summary:**
-- `WF_of_Inv` is proved. Every clause follows from `main`'s `Inv` + `CapOk`, so there is no ⚑.
-- The inner body lemma `w_inner_body` is proved with the identity relation of PLAN-W §4 A3.
-- **No continuation-style clause was needed,** which confirms the prediction.
-- The inner loop lemma `w_inner_loop` is proved in both directions: walk `some` → the program runs to a related state; walk `none` → the program has no run (bound exhausted, `me_trap(2)`, or buffer full, `me_trap(3)`).
-- Axioms: `propext`, `Classical.choice`, `Quot.sound`.
+- **`Walk.refines` is proved.** For every store satisfying `Inv` and every request, the program's run returns `Walk.process`'s result code, trades and book view, and `Inv` holds again (`WRefines`).
+- **`Walk.matcher_refines` is proved as its corollary,** with `main`'s statement verbatim. `example : type_of% @Walk.matcher_refines = type_of% @MatcherAccept.matcher_refines := rfl` checks.
+- `#print axioms Walk.matcher_refines` gives `propext`, `Classical.choice`, `Quot.sound`.
+- **Dependency check.** The transitive closure of `Walk.matcher_refines` (computed with a small `#eval` over the environment) contains none of `main`'s:
+  - loop proofs (`inner_body`, `inner_loop`, `outer_body`, `outer_loop`);
+  - side and accept proofs (`side_cont`, `side_run`, `refines_accept`);
+  - invariants (`IInv`, `SInv`, `OInv`, `OCtx`, `MCtx`) and their helpers (`head_facts`, `core_facts`, `sinv_*`);
+  - `matcher_refines` itself.
+
+  The only direct-route lemma it reaches is `MatcherSpec.rest_step`, used by A2's `step_sim` as approved.
 
 ## Done
 
-| File | Lines | Contents | A4 category |
-|---|---|---|---|
-| `lean/Walk/WFInv.lean` | 136 | `WF_of_Inv` and two generic list lemmas | walk-route-specific; the direct route states no `WF` |
-| `lean/Walk/LogicInv.lean` | 146 | Inversion rules for `main`'s program logic: `loopRun_of_eval`, `Eval.seq_inv`, `Eval.ite_inv`, `Eval.emit_inv` | infrastructure; used only by the trap direction, which the direct route does not prove |
-| `lean/Walk/RefineInner.lean` | 866 | `WR`; `book_step`; the head facts; `invM_drop`/`invM_setRem`; `WCore`; `w_inner_body`; `w_inner_body_trap`; `w_inner_run`/`w_inner_run_none`; `w_inner_loop` | walk route, A3 |
+| File | Lines | Contents |
+|---|---|---|
+| `lean/Walk/RefineOuter.lean` | 525 | `WFr` and the walk frame lemmas (`innerStep_fr` … `outerRun_fr`, `innerRun_stop`); `WO`; `w_outer_body`; `w_outer_body_trap`; `w_outer_run`/`w_outer_run_none`; `w_outer_loop` |
+| `lean/Walk/Refine.lean` | 517 | view transfer (`count_of_view`, `levelsUsed_of_view`, `idOnBook_of_view`, `fr_facts`); `rest_accept`, `insSpec_views`; `w_side_cont`, `w_side_run`; `WRefines`; `w_refines_accept`; **`refines`**; **`matcher_refines`** |
 
-### 1. `WF_of_Inv`, clause by clause
+### 4. Outer body and outer loop
 
-`Inv s → CapOk S → WF (capacity S) (absBook (view s))`:
+`WO r isBuy s L ts st` is the relation at outer-iteration boundaries:
+- `Inv s`, `main`'s invariant with no empty level;
+- the identity clauses: `bookView`, `rem`, `stop`, trades;
+- `stopX`: once `stop` is set, no contra level crosses. This is the walk's exit clause stated on the store and established by `main`'s `stopX_of_best`. The resting step's uncrossedness needs it.
 
-| `WF` field | From |
-|---|---|
-| `cap64` | `CapOk` |
-| `stops` | `absBook`: `rfl` |
-| `count` | `bookSize_absBook` + `Inv.count_eq` + `Inv.count_le` |
-| `nonempty` | `ClientInv.level_nonempty` through `absQueue_ne_nil` |
-| `resting` | `ClientInv.order_ok` (positive remaining); the rest by `restingOrder`'s definition |
-| `ids` | `Db.WF`: `tree_nodup`, `tree_disjoint`, `queue_nodup`, `queue_unique` (the resting handles are distinct), `hash_ids` + `hash_live` + `ClientInv.hash_iff_queued` (distinct handles have distinct ids), and the decoded id list is a permutation of the handles' ids |
-| `sorted` | `absSide_pairwise` |
+The lemmas:
+- **`w_outer_body`:** level fetch, the two stop tests, `qFirst`, the inner loop (A3a's `w_inner_loop` under `WR`), and the cleanup.
+  - The cleanup uses `main`'s `ev_free`/`ev_nofree`, and `free_clientInv`/`free_levels_resting`/`free_restingCount`/`free_tree_length` to go from `InvM` back to `Inv`.
+  - The book clause after the cleanup: `free_absSide` against the walk's `dropBest`.
+- **`w_outer_body_trap`**, **`w_outer_run`/`w_outer_run_none`**, **`w_outer_loop`:** both directions, as for the inner loop.
 
-### 2. The relation, and the answer to the prediction
+### 5. Side function, entry, rest, result code
 
-`WR r isBuy l s L ts st`:
+- **`w_side_run`:** post-only (the walk's `postOnlyCross` against the program's `poStmt`, both cases), then `w_side_cont`.
+- **`w_side_cont`:**
+  - `rem := qty`, then the outer loop.
+  - The resting step: `main`'s `rest_run` (program), `rest_inv` (`Inv` after resting) and `rest_book` (the decoded own side) against A2's walk-side `rest_accept`.
+  - The resting step's preconditions (count below capacity, the id not hashed, `rem ≤ qty`) come from the walk frame `outerRun_fr` through the view (`fr_facts`, `count_of_view`, `idOnBook_of_view`), not from extra invariant clauses.
+  - Result code `ACCEPTED`.
+- **`w_refines_accept`:** `main`'s entry glue (`prefix_run`, `eval_dup`, `ev_dupcheck`, `ev_capcheck`, `ev_call_side`, `order_run`) with `w_side_run` in place of `side_run`.
+- **Entry rejections and cancel.** `refines` takes them from `main`'s `refines_static`, `refines_duplicate`, `refines_capacity` (`Refines.lean`) and `refines_cancel` (`Cancel.lean`), together with A2's exact agreement on those cases (`processOrder_entry`, `cancel_eq`). Those files are outside both routes' specific totals as Ara defined them (⚑1).
 
-| Clause | Kind |
-|---|---|
-| `book : bookView (absBook (view s)) = bookView st.book` | identity |
-| `rem : L.rem.toNat = st.rem` | identity |
-| `stop : L.stop = st.stop` | identity |
-| `trades : ts = st.trades.map tradeObs` | identity |
-| `bestL : L.best = some l` | derived local |
-| `passive : L.rem ≠ 0 → L.passive = (queue l).head?` | derived local |
-| `inv : InvM s l`; `mem`: `l` in the contra tree; `best`: `l` best there | store-side (`main`'s `InvM`, imported) |
+### 6. `matcher_refines`
 
-**Continuation-style clause needed: no.**
-- Nothing in `WR` mentions `doMatch`, `rest`, a final result, or any reference state.
-- Also absent are the direct `IInv`'s `aggr`/`shape` (the incoming order against `rem`) and `tbound` (the trade-buffer bound).
-- `tbound` is not needed because the walk's emit test (`trades.length < cap + 1`) and the program's (`ts.length < capacity + 1`) are the same test once `ts = st.trades.map tradeObs`. So the program traps exactly where the walk does, and nothing has to be bounded.
-- The empty head level needs no clause either. The decoded store and the walk's book both keep it, so `bookView` equality covers it literally.
+From `refines` and A2's `process_agree` (with `WF_of_Inv`): the result code and trades equal `processB`'s, and the book view equal through `bookView_iff`. That is 11 lines.
 
-### 3. The inner body: `w_inner_body`
+### 7. Evidence re-run
 
-From `WR … st`, with the inner test true and `innerStep st = some st'`, the program's `innerBody` ends normally in a state related to `st'` by `WR`.
-- Each of the six branches is: unfold `innerStep` (rewriting `tBest`/`qFirst` with the head facts), follow the same branch in the program with `main`'s `ev_*` statement lemmas, and re-establish `WR`.
-- The book clause comes from one generic lemma, `book_step`: a `Frame` step on level `l` and a head-level edit on the walk give the same view if the new head levels have the same view. The two head-level views are `view_drop` and `view_setRem`.
-- The STP test is related by `acct_iff`: the walk's `getAccount` against the row's `account`.
+- `docs/walk-spec/walk_diff.sh`: 8 configurations, 144,000 steps, D1 0, D2 0, 0 traps, 10,279 pessimistic capacity rejects.
+- `MUTANT=1` (Spec.lean:196): caught by D1 (14) and D2 (14).
+- `MUTANT=2` (Spec.lean:236): caught by D1 (11) and D2 (11), with 29 traps.
 
-### 4. The trap and the loop
-
-- **`w_inner_body_trap`:** where `innerStep st = none` (full trade buffer), the program's body has no run of any outcome. The proof runs `ite`/`seq` inversion through the fill block to the `emit`, whose inversion contradicts the full buffer.
-- **`w_inner_run` / `w_inner_run_none`:** induction on the budget. It mirrors `innerRun`'s recursion one for one, so no measure is needed; the direct route needs `imeasure`.
-- **`w_inner_loop`:** at the bound `capacity + 1`:
-  - `innerRun … = some st'` → the loop statement `Eval`s to a related state;
-  - `innerRun … = none` → the loop statement has no run.
-
-  The second half uses `loopRun_of_eval`: a successful loop is a `LoopRun` of its budget, so with the budget spent and the test true there is none.
-
-## A3 lemmas: mechanical or not (the experiment's main output)
-
-"Mechanical" means the proof goes through by unfolding the walk and evaluating statements, with no statement or idea specific to the proof. The obstacles hit in the mechanical rows were name resolution (`Walk.count` shadowing `EngineDb.count`), projections of `wctx`, and Lean syntax, not mathematics.
+## A3b lemmas: mechanical or not
 
 | Lemma | Lines | Mechanical? | Note |
 |---|---|---|---|
-| `WR` (definition) | 13 | — | the identity relation; written down, not invented |
-| `bookView_sides`, `sideL_absBook` | 10 | mechanical | unfolding |
-| `book_step` | 43 | **not** | the one generic idea of A3a: a frame step at level `l` preserves the view outside `l`'s head position (`absSide_best` + `Frame.restSide_eq` + `Frame.absSide_other`). Stated once, used six times |
-| `wr_split` | 22 | mechanical | decompose `WR.book` with `absSide_best` |
-| `WHead`, `whead` | 42 | mechanical | collect the head facts; mirrors `main`'s `head_facts` minus its spec part |
-| `acct_iff` | 16 | mechanical | case split on account 0 |
-| `invM_drop`, `invM_setRem` | 39 | mechanical | store-side; `main`'s `sinv_drop`/`sinv_setRem` restricted to `InvM` |
-| `best_frame`, `view_drop`, `view_setRem` | 45 | mechanical | frame and list congruence |
-| `WCore`, `wcore` | 57 | mechanical | `main`'s `core_facts` minus its spec part |
-| `ev_innerCond_walk` | 27 | mechanical | the inner test, both sides |
-| `w_inner_body` | 303 | mechanical | six branches, each an `ev_*` chain plus `WR` re-establishment; nothing to invent |
-| `seq_through`, `w_inner_body_trap` | 68 | mechanical | inversion down the fill block |
-| `w_inner_run`, `w_inner_run_none`, `w_inner_loop` | 103 | mechanical | induction mirroring `innerRun` |
-| `WF_of_Inv` (+ list helpers) | 136 | **not quite** | the `ids` clause needs a short argument: distinct handles, then the hash makes their ids distinct. The other clauses are mechanical |
-| `LogicInv` (4 inversion rules) | 146 | mechanical, infrastructure | `loopRun_of_fold` took three attempts, over unfolding hygiene, not content |
+| walk frame (`WFr`, `innerStep_rem_le`, `innerStep_stop`, `innerRun_stop`, `innerStep_fr`, `innerRun_fr`, `outerStep_fr`, `outerRun_fr`) | 130 | mechanical | walk-only, case analysis of one step |
+| `WO` (definition) | 10 | — | identity + `Inv` + exit clause |
+| `crosses_iff`, `side_views`, `ev_outerCond_walk` | 20 | mechanical | |
+| `w_outer_body` | 150 | mechanical | `ev_*` chains and `main`'s free lemmas; the one new step is the book view after `dropBest` (`free_absSide`) |
+| `w_outer_body_trap` | 81 | mechanical | inversion down to the inner loop |
+| `w_outer_run`, `w_outer_run_none`, `w_outer_loop` | 92 | mechanical | induction mirroring `outerRun` |
+| view transfer (`count_of_view`, `levelsUsed_of_view`, `idOnBook_of_view`, `idOnBook_sides`, `fr_facts`) | 60 | mechanical | |
+| `rest_accept`, `insSpec_views` | 44 | mechanical | A2's rest lemmas and `main`'s `nL` normal forms |
+| `w_side_cont` | 154 | mechanical | **one design choice:** the resting step's store preconditions come from the walk frame through the view |
+| `w_side_run` | 86 | mechanical | |
+| `WRefines`, `w_refines_accept`, `wrefines_of_refines`, `refines`, `matcher_refines` | 123 | mechanical | assembly |
 
-**A3a on the walk route:** apart from `book_step` (43 lines) and the `ids` clause of `WF_of_Inv`, every lemma is mechanical.
+**A3 as a whole:** apart from A3a's `book_step` (43 lines) and the `ids` clause of `WF_of_Inv`, every A3 lemma is mechanical. The prediction "the loop part is structural" holds.
 
-**The same ground on the direct route** (`Inner.lean`):
-- `IInv`/`SInv`/`OCtx.Ok` carry the continuation `spec`, `aggr`, `shape`, `tbound` and `SInv.empty`/`head` (the reference contra list against the store). Each branch lemma re-establishes each of them.
-- `inner_cancelNew` 20, `inner_cancelOld` 75, `inner_dec` 120, `inner_fill` 143, `inner_body` 14, `inner_run` + `inner_loop` 59: about 431 lines. That is before the shared `head_facts`/`sinv_*`/`core_facts` (about 250), in a 996-line file.
-- The walk-route counterpart is `w_inner_body` 303 + loop and trap 171 + relation and helpers about 390, for 866 lines in total. That includes the trap direction, which the direct route does not have.
-
-## Running totals (Ara's A4 addition, stated now)
+## Running totals (lines; Ara's scopes)
 
 | Route | Files | Lines |
 |---|---|---|
 | **Direct, route-specific** | `Inner` 996 + `Outer` 440 + `Rest` 919 + `Accept` 649 | **3,004** |
-| **Walk, route-specific so far** | `Spec` 432 + `Basic` 335 + `EquivEntry` 444 + `EquivMatch` 680 + `Equiv` 417 + `RefineInner` 866 | **3,174** |
+| **Walk, route-specific** | `Spec` 432 + `Basic` 335 + `EquivEntry` 444 + `EquivMatch` 680 + `Equiv` 417 + `RefineInner` 866 + `RefineOuter` 525 + `Refine` 517 | **4,216** |
 | Walk, extra: `WF_of_Inv` | `WFInv` 136 | 136 |
-| Walk, extra: trap direction (language infrastructure) | `LogicInv` 146 | 146 |
-| Not counted | `Check.lean` 138 (evidence); `SpecStep`, `StoreStep`, `LoopEnv`, `Logic`, `Refines`, `Cancel`, `Run` (shared) | — |
+| Walk, extra: trap direction (language inversion) | `LogicInv` 146 | 146 |
 
-The walk-route totals exclude A3b: outer body and loop, entry, cancel, rest and result code, and the corollary.
+**Caveats, to be resolved in A4's attribution:**
+1. **Part of the direct total is shared.** The walk route imports and reuses store- and program-side lemmas that live in the direct route's files:
+   - from `Rest.lean`: `rest_run`, `rest_inv`, `rest_book` and their helpers, about 600 of its 919 lines, none mentioning the continuation;
+   - from `Outer.lean`: `ev_free`, `ev_nofree`, `free_levels_resting`, `stopX_of_best`, `count_le_cap_lc`, `pos_of_ne`;
+   - from `Accept.lean`: the entry glue `ev_call_side`, `dupEnvR`, and `wouldCross`/post-only evaluation;
+   - from `Inner.lean`: the view helpers.
 
-## Shared lemmas from `main` used in A3a (all by import)
-
-- **`StoreStep`:** `InvM`, `Frame` (+ `restSide_eq`, `absSide_other`, `levelPrice_eq`), `dropDb`, `setRemDb`, `frame_drop`, `frame_setRem`, `drop_clientInvM`, `drop_orders_resting`, `drop_restingCount`, `setRem_clientInvM`, `absSide_best`, `restSide`, `levelView_absLevel`, `ordV`.
-- **`LoopEnv`:** `Loc`, `mkSt`, `innerBody`, `innerCond`, `fillStmts`, `cancelOldBlock`, `umin`, and the `ev_*` statement lemmas (`ev_innerCond`, `ev_stpCond`, `ev_stp_eq`, `ev_oldBoth`, `ev_rem0`, `ev_victim`, `ev_qNextP`, `ev_qNextN`, `ev_remove`, `dropS_facts`, `ev_min`, `ev_subRem`, `ev_prem`, `ev_setRem`, `ev_emit`, `ev_premWhen_zero`/`pos`, `ev_passiveNext`, `boundVal_trade`, `lsimp`).
-- **`Logic`:** `Eval` and its rules, `LoopRun`, `Eval.loop`, `Eval.det`, `execStmt_loop_finish`, `foldl_loopStep_*`.
-- **`Inner.lean`:** its store and view helpers, none carrying the continuation: `head_decomp`, `RowView`, `rowView_of`, `view_update`, `ordV_congr`, `qNext_head`, `dropDb_setRem`.
-- **`Refines`:** `Inv`, `CapOk`. **`EngineDbAbs` / `Refines` / `Cancel`:** `absQueue_ne_nil`, `mem_absQueue`, `bookSize_absBook`, `absSide_pairwise`, `sortLevels_perm`, `mem_sortLevels`, `rowOf`.
+   A4 will move these into "shared" on both sides, so the route-specific comparison is like for like.
+2. **The walk total includes work the direct route has no counterpart for:**
+   - the walking spec itself and its fuel proof (A1, 767 lines);
+   - the trap direction (loop and body traps, about 300 lines, plus `LogicInv`).
+3. **The walk route's A2 (1,541 lines) is where the direct route's continuation clauses went,** as a Lean-only proof.
 
 ## Deviations from PLAN-W.md (what, why)
 
-1. **`WR` carries three store-side clauses:** `InvM`, `l ∈ tree`, `l` best. They are facts about the store, not about the walk or the reference. The direct route has them too, in `SInv` and `OCtx.Ok`.
-2. **Two infrastructure files beyond PLAN-W §4:**
-   - `WFInv.lean`: needed by the corollary. The direct route states its relation on `absBook` directly and never needs `WF`.
-   - `LogicInv.lean`: the trap direction Ara asked for needs converse rules the program logic did not have.
-3. **The trap correspondence is stated as "no successful run"** (`¬ Eval …`), since `Eval` only describes successful runs. The error value itself (`.bound` vs `.tradeBuffer`) is not identified.
+1. **The rejection and cancel cases use `main`'s lemmas** plus A2's exact agreement (⚑1).
+2. **`WO` has no count or hash clause.** The resting step's store preconditions come from a walk-only frame lemma (`outerRun_fr`) through the view. PLAN-W did not prescribe this; it avoids re-adding the direct route's `cnt`/`hashid`/`remle` clauses.
+3. **`Walk.refines` is stated as `WRefines`,** which mirrors `main`'s `Refines` with `Walk.process … = some w` in place of `specStep`. It does not use PLAN-W §3's `execStmt … = .ok` shape, because `main`'s entry point is `runEntry` and its `Refines` is stated that way.
 
 ## Findings
 
-1. **Prediction confirmed.** The inner loop needs no continuation clause. The relation is identity on the walk's fields, plus two derived locals, plus store facts.
-2. **The direct route's trade-buffer bound (`IInv.tbound`) disappears.** It becomes literal equality of the emit test on both sides. A1's potential argument (trades + contra orders ≤ cap) is still needed, but only once, on the walk (`run_fuel_sufficient`), and not inside the refinement.
-3. **The empty head level between the inner loop and the cleanup needs no bookkeeping clause.** The direct route has `SInv.empty`/`head`. Here, decoded store and walk both hold the empty level, and the view equality covers it.
-4. **The inner loop needs no measure.** The walk's `innerRun` has the program's budget, so the induction is on the budget itself; the direct route has `imeasure` and its decrease proofs.
-5. **What remains is store-side and statement evaluation.** Of `RefineInner`'s 866 lines:
-   - about 110 relate store to walk (`book_step`, `wr_split`, `view_drop`, `view_setRem`, `acct_iff`);
-   - about 140 are store-side (`InvM`, `WCore`, frames);
-   - the rest is statement evaluation and assembly.
+1. **`matcher_refines` follows from `Walk.refines` and A2 in 11 lines,** and needs none of the direct route's loop proofs or invariants (dependency check above).
+2. **No continuation clause anywhere in A3.** The outer relation is identity + `Inv` + the store form of the walk's exit clause.
 
-   This split feeds A4's three-way classification.
+   Of the direct `OInv`'s 13 clauses:
+
+   | Clause | What became of it |
+   |---|---|
+   | `spec`, `aggr`, `shape`, `stopT` | moved into A2 (Lean-only) |
+   | `tbound` | disappeared (the emit tests coincide) |
+   | `cnt`, `hashid`, `remle` | replaced by one walk-only frame lemma used through the view |
+   | `inv`, `own`, `cview`, `trades`, `stopX` | remain, as `Inv`, the `bookView` identity, the trades identity and `stopX` |
+
+3. **`Rest.lean` is mostly not route-specific.** Its resting-step lemmas carry no continuation, and the walk route reuses them unchanged. The same is true of `Outer.lean`'s free and cleanup lemmas. "Route-specific" as a file-level scope overstates the direct route's specific cost.
+4. **Everything in A3b went through by unfolding and statement evaluation.** The obstacles were engineering:
+   - name clashes between `Walk.tBest`/`count`/`hashFind` and the store operations;
+   - `wctx` projections;
+   - `rw` under `decide`;
+   - `cases` on a `Prop`.
 
 ## ⚑ Questions for Ara
 
-None.
+1. **Scope of the rejection and cancel cases.** `Walk.refines` takes those four cases from `main`'s `refines_static`/`refines_duplicate`/`refines_capacity`/`refines_cancel`, since `Walk.process` equals `processB` exactly there (A2). That matches your A4 scope, since `Refines.lean`/`Cancel.lean` are outside both route-specific totals. Is it acceptable?
+   - The alternative is a walk-native proof of those cases.
+   - For cancel, that would restate `Cancel.lean`'s store-view argument against `Walk.cancel`, which equals `cancelOrder` exactly. So it adds no new content, at a cost of roughly 300–500 lines.
 
-## Next phase, first step (A3b)
+## Next
 
-1. `lean/Walk/RefineOuter.lean`. The outer body (level fetch, stop tests, `matchBlock` = `qFirst` + inner loop + `freeStmt`) against `outerStep`, with `InvM` → `Inv` at the cleanup. The relation outside an iteration is `WR` without `l`: `Inv s`, `bookView` equality, `rem`, `stop`, `trades`.
-2. It uses `main`'s `free_clientInv`, `free_absSide`, `free_restingCount` and `stopX_of_best`, if the walk's stop clause needs it.
-3. Then the outer loop (`w_outer_loop`), the entry checks, post-only, rest, cancel, `Walk.refines`, and `matcher_refines` verbatim.
+A4: `docs/walk-spec/RESULT-W.md`. It will contain:
+- the lemma-by-lemma table, with each lemma's lines split into store-side / spec-relation / glue;
+- totals per route and overall;
+- which store operations recur in the most branches (popping one resting order is three contract calls);
+- what was mechanical and what needed thought (the classification above);
+- where the difficulty moved;
+- `walk_oracle` as an option;
+- the recommendation.
+
+Sessions: A0 1, A1 1, A2 1, A3a 1, A3b 1.
