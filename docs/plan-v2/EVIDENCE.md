@@ -79,6 +79,22 @@ That is 12 configurations × 150,000 operations = 1.8 million operations. **All 
 | Hash insert replaces a duplicate id instead of refusing it | `hashInsert_law` |
 | The remaining-quantity write no longer updates the level total | totals |
 
+The mutants are checked-in harness modes that patch a temporary copy at build
+time; the tracked adapter is not modified.  Reproduced with
+`MUTANT=1|2|3 tests/contract/run.sh`:
+
+```text
+mutant 1: engine_db_adapter.c:70, >= g_cap -> > g_cap
+CONTRACT FAILURE seed 1 step 67: orderAlloc_law ... violated
+contract mutant 1 caught
+mutant 2: engine_db_adapter.c:107, remove the equal-id row before insert
+CONTRACT FAILURE seed 1 step 275: hashInsert_law ... accepted a duplicate id
+contract mutant 2 caught
+mutant 3: engine_db_adapter.c:95-98, omit the level-total adjustment
+CONTRACT FAILURE seed 1 step 35: totals ... level total != sum of remaining
+contract mutant 3 caught
+```
+
 ## 2. Differential test (`tests/differential/`)
 
 **Three voices.** For each seed, `gen_stream.py` produces a random request
